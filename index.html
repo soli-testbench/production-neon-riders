@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Neon Riders</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html, body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #0a0a0a;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        color: #ffffff;
+      }
+      #game-canvas {
+        display: block;
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: 0;
+      }
+    </style>
+    <link rel="stylesheet" href="/src/client/ui/styles.css" />
+  </head>
+  <body>
+    <canvas id="game-canvas"></canvas>
+
+    <!-- Lobby Overlay -->
+    <div id="lobby-overlay" class="overlay">
+      <div class="lobby-container">
+        <h1 class="neon-title">NEON RIDERS</h1>
+        <p class="subtitle">A Tron-style light bike arena</p>
+
+        <div id="name-section" class="lobby-section">
+          <label class="neon-label" for="player-name">RIDER NAME</label>
+          <input type="text" id="player-name" class="neon-input" placeholder="Enter your name..." maxlength="16" />
+        </div>
+
+        <div id="color-section" class="lobby-section">
+          <label class="neon-label">BIKE COLOR</label>
+          <div id="color-picker" class="color-picker"></div>
+        </div>
+
+        <div id="menu-buttons" class="lobby-section">
+          <button id="btn-create-room" class="neon-btn neon-btn-primary">CREATE ROOM</button>
+          <div class="join-row">
+            <input type="text" id="room-code-input" class="neon-input" placeholder="Room code..." maxlength="6" />
+            <button id="btn-join-room" class="neon-btn">JOIN ROOM</button>
+          </div>
+        </div>
+
+        <div id="room-section" class="lobby-section" style="display:none;">
+          <div class="room-header">
+            <span class="neon-label">ROOM CODE:</span>
+            <span id="room-code-display" class="room-code"></span>
+          </div>
+          <div id="player-list" class="player-list"></div>
+          <button id="btn-start-game" class="neon-btn neon-btn-primary" style="display:none;">START GAME</button>
+          <div id="countdown-display" class="countdown" style="display:none;"></div>
+          <button id="btn-leave-room" class="neon-btn neon-btn-danger">LEAVE ROOM</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Game Over Overlay -->
+    <div id="gameover-overlay" class="overlay" style="display:none;">
+      <div class="gameover-container">
+        <h2 class="neon-title gameover-title">GAME OVER</h2>
+        <p id="gameover-message" class="subtitle"></p>
+        <button id="btn-back-lobby" class="neon-btn neon-btn-primary">BACK TO LOBBY</button>
+      </div>
+    </div>
+
+    <!-- HUD -->
+    <div id="hud" style="display:none;">
+      <div id="hud-players" class="hud-players"></div>
+    </div>
+
+    <script type="module" src="/src/client/main.ts"></script>
+  </body>
+</html>

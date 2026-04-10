@@ -1,4 +1,4 @@
-import { NEON_COLORS } from '../../shared/types.js';
+import { NEON_COLORS, sanitizeColor } from '../../shared/types.js';
 import { NetworkClient } from '../network.js';
 import { ServerMessage } from '../../shared/protocol.js';
 
@@ -204,8 +204,9 @@ export class LobbyUI {
 
       const dot = document.createElement('div');
       dot.className = 'player-color-dot';
-      dot.style.backgroundColor = p.color;
-      dot.style.boxShadow = `0 0 6px ${p.color}`;
+      const safeColor = sanitizeColor(p.color);
+      dot.style.backgroundColor = safeColor;
+      dot.style.boxShadow = `0 0 6px ${safeColor}`;
 
       const nameSpan = document.createElement('span');
       nameSpan.className = 'player-name';
@@ -233,8 +234,9 @@ export class LobbyUI {
 
       const dot = document.createElement('div');
       dot.className = 'hud-dot';
-      dot.style.backgroundColor = b.color;
-      dot.style.boxShadow = `0 0 4px ${b.color}`;
+      const safeColor = sanitizeColor(b.color);
+      dot.style.backgroundColor = safeColor;
+      dot.style.boxShadow = `0 0 4px ${safeColor}`;
 
       const nameSpan = document.createElement('span');
       nameSpan.textContent = b.name;

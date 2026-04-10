@@ -41,3 +41,11 @@ export const NEON_COLORS = [
 ];
 
 export const BIKE_SPEED = 3;
+
+export function isValidNeonColor(color: string): boolean {
+  return NEON_COLORS.includes(color);
+}
+
+export function sanitizeColor(color: string): string {
+  return isValidNeonColor(color) ? color : NEON_COLORS[0];
+}

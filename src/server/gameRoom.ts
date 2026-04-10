@@ -1,5 +1,5 @@
 import { WebSocket } from 'ws';
-import { BikeState, ArenaConfig, DEFAULT_ARENA, Direction } from '../shared/types.js';
+import { BikeState, ArenaConfig, DEFAULT_ARENA, Direction, sanitizeColor } from '../shared/types.js';
 import { createBike, turnBike, moveBike, killBike } from '../shared/bike.js';
 import { checkAllCollisions } from '../shared/collision.js';
 import {
@@ -42,7 +42,9 @@ export class GameRoom {
     if (this.players.size >= 8) return false;
 
     const isHost = this.players.size === 0;
-    this.players.set(id, { id, name, color, ws, isHost });
+    const safeName = name.slice(0, 16).replace(/[<>&"'/]/g, '');
+    const safeColor = sanitizeColor(color);
+    this.players.set(id, { id, name: safeName, color: safeColor, ws, isHost });
 
     this.broadcastPlayerList();
     return true;

@@ -1,3 +1,5 @@
+import { sanitizeColor } from '../../shared/types.js';
+
 export interface PlayerInfo {
   id: string;
   name: string;
@@ -14,8 +16,9 @@ export function renderPlayerList(container: HTMLElement, players: PlayerInfo[]):
 
     const dot = document.createElement('div');
     dot.className = 'player-color-dot';
-    dot.style.backgroundColor = p.color;
-    dot.style.boxShadow = `0 0 6px ${p.color}`;
+    const safeColor = sanitizeColor(p.color);
+    dot.style.backgroundColor = safeColor;
+    dot.style.boxShadow = `0 0 6px ${safeColor}`;
 
     const name = document.createElement('span');
     name.className = 'player-name';

@@ -9,7 +9,7 @@ export interface PlayerInfo {
 }
 
 export function renderPlayerList(container: HTMLElement, players: PlayerInfo[]): void {
-  container.innerHTML = '';
+  while (container.firstChild) container.removeChild(container.firstChild);
   players.forEach((p) => {
     const item = document.createElement('div');
     item.className = 'player-item';

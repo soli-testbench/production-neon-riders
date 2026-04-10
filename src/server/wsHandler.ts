@@ -1,7 +1,7 @@
 import { WebSocket } from 'ws';
 import { GameRoom } from './gameRoom.js';
 import { ClientMessage, ServerMessage } from '../shared/protocol.js';
-import { NEON_COLORS } from '../shared/types.js';
+import { sanitizeColor, sanitizeName, isValidDirection } from '../shared/types.js';
 
 function generateId(): string {
   return Math.random().toString(36).substring(2, 10);
@@ -50,8 +50,9 @@ export class WebSocketHandler {
         const room = new GameRoom(roomId);
         this.rooms.set(roomId, room);
 
-        const validColor = NEON_COLORS.includes(msg.color) ? msg.color : NEON_COLORS[0];
-        room.addPlayer(playerId, msg.name, validColor, ws);
+        const safeColor = sanitizeColor(msg.color);
+        const safeName = sanitizeName(msg.name || '');
+        room.addPlayer(playerId, safeName, safeColor, ws);
         this.playerRooms.set(playerId, roomId);
 
         this.sendTo(ws, {
@@ -75,8 +76,9 @@ export class WebSocketHandler {
           return;
         }
 
-        const validColor = NEON_COLORS.includes(msg.color) ? msg.color : NEON_COLORS[0];
-        const added = room.addPlayer(playerId, msg.name, validColor, ws);
+        const safeColor = sanitizeColor(msg.color);
+        const safeName = sanitizeName(msg.name || '');
+        const added = room.addPlayer(playerId, safeName, safeColor, ws);
         if (!added) {
           this.sendTo(ws, { type: 'error', message: 'Cannot join room (full or in progress)' });
           return;
@@ -94,6 +96,7 @@ export class WebSocketHandler {
       }
 
       case 'input': {
+        if (!isValidDirection(msg.direction)) return;
         const roomId = this.playerRooms.get(playerId);
         if (roomId) {
           const room = this.rooms.get(roomId);

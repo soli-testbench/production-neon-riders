@@ -59,7 +59,7 @@ export class LobbyUI {
   }
 
   private initColorPicker(): void {
-    this.colorPicker.innerHTML = '';
+    while (this.colorPicker.firstChild) this.colorPicker.removeChild(this.colorPicker.firstChild);
     NEON_COLORS.forEach((color, idx) => {
       const swatch = document.createElement('div');
       swatch.className = 'color-swatch' + (idx === 0 ? ' selected' : '');
@@ -197,7 +197,7 @@ export class LobbyUI {
   }
 
   private renderPlayerList(players: { id: string; name: string; color: string; isHost: boolean }[]): void {
-    this.playerList.innerHTML = '';
+    while (this.playerList.firstChild) this.playerList.removeChild(this.playerList.firstChild);
     players.forEach((p) => {
       const item = document.createElement('div');
       item.className = 'player-item';
@@ -227,7 +227,7 @@ export class LobbyUI {
   }
 
   private updateHUD(bikes: { id: string; name: string; color: string; alive: boolean }[]): void {
-    this.hudPlayers.innerHTML = '';
+    while (this.hudPlayers.firstChild) this.hudPlayers.removeChild(this.hudPlayers.firstChild);
     bikes.forEach((b) => {
       const el = document.createElement('div');
       el.className = 'hud-player' + (b.alive ? '' : ' dead');
@@ -259,9 +259,4 @@ export class LobbyUI {
     this.onGameStart = cb;
   }
 
-  private escapeHtml(text: string): string {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
 }

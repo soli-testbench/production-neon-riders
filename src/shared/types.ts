@@ -5,6 +5,12 @@ export interface Point {
 
 export type Direction = 'up' | 'down' | 'left' | 'right';
 
+export const VALID_DIRECTIONS: readonly Direction[] = ['up', 'down', 'left', 'right'];
+
+export function isValidDirection(dir: unknown): dir is Direction {
+  return typeof dir === 'string' && VALID_DIRECTIONS.includes(dir as Direction);
+}
+
 export interface BikeState {
   id: string;
   x: number;
@@ -48,4 +54,8 @@ export function isValidNeonColor(color: string): boolean {
 
 export function sanitizeColor(color: string): string {
   return isValidNeonColor(color) ? color : NEON_COLORS[0];
+}
+
+export function sanitizeName(name: string): string {
+  return name.slice(0, 16).replace(/[<>&"'/]/g, '');
 }

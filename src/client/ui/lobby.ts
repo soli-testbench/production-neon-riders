@@ -201,11 +201,26 @@ export class LobbyUI {
     players.forEach((p) => {
       const item = document.createElement('div');
       item.className = 'player-item';
-      item.innerHTML = `
-        <div class="player-color-dot" style="background:${p.color};box-shadow:0 0 6px ${p.color}"></div>
-        <span class="player-name">${this.escapeHtml(p.name)}</span>
-        ${p.isHost ? '<span class="player-host-badge">HOST</span>' : ''}
-      `;
+
+      const dot = document.createElement('div');
+      dot.className = 'player-color-dot';
+      dot.style.backgroundColor = p.color;
+      dot.style.boxShadow = `0 0 6px ${p.color}`;
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'player-name';
+      nameSpan.textContent = p.name;
+
+      item.appendChild(dot);
+      item.appendChild(nameSpan);
+
+      if (p.isHost) {
+        const badge = document.createElement('span');
+        badge.className = 'player-host-badge';
+        badge.textContent = 'HOST';
+        item.appendChild(badge);
+      }
+
       this.playerList.appendChild(item);
     });
   }
@@ -215,10 +230,17 @@ export class LobbyUI {
     bikes.forEach((b) => {
       const el = document.createElement('div');
       el.className = 'hud-player' + (b.alive ? '' : ' dead');
-      el.innerHTML = `
-        <div class="hud-dot" style="background:${b.color};box-shadow:0 0 4px ${b.color}"></div>
-        <span>${this.escapeHtml(b.name)}</span>
-      `;
+
+      const dot = document.createElement('div');
+      dot.className = 'hud-dot';
+      dot.style.backgroundColor = b.color;
+      dot.style.boxShadow = `0 0 4px ${b.color}`;
+
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = b.name;
+
+      el.appendChild(dot);
+      el.appendChild(nameSpan);
       this.hudPlayers.appendChild(el);
     });
   }

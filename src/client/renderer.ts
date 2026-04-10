@@ -1,5 +1,5 @@
 import { GameCanvas } from './canvas.js';
-import { BikeState, ArenaConfig, Point } from '../shared/types.js';
+import { BikeState, ArenaConfig, Point, sanitizeColor } from '../shared/types.js';
 
 export class Renderer {
   private gameCanvas: GameCanvas;
@@ -74,13 +74,14 @@ export class Renderer {
     const ctx = this.ctx;
     const ox = this.offsetX;
     const oy = this.offsetY;
+    const color = sanitizeColor(bike.color);
 
     // Draw trail
     if (bike.trail.length > 1) {
       ctx.save();
-      ctx.strokeStyle = bike.color;
+      ctx.strokeStyle = color;
       ctx.lineWidth = 3;
-      ctx.shadowColor = bike.color;
+      ctx.shadowColor = color;
       ctx.shadowBlur = 12;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
@@ -109,7 +110,7 @@ export class Renderer {
     if (bike.alive) {
       ctx.save();
       ctx.fillStyle = '#ffffff';
-      ctx.shadowColor = bike.color;
+      ctx.shadowColor = color;
       ctx.shadowBlur = 20;
 
       const size = 6;
@@ -118,7 +119,7 @@ export class Renderer {
       ctx.fill();
 
       // Inner glow
-      ctx.fillStyle = bike.color;
+      ctx.fillStyle = color;
       ctx.shadowBlur = 10;
       ctx.beginPath();
       ctx.arc(ox + bike.x, oy + bike.y, size - 2, 0, Math.PI * 2);

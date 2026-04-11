@@ -6,7 +6,7 @@ import { NetworkClient, ConnectionStatus } from './network.js';
 import { LobbyUI } from './ui/lobby.js';
 import { BikeInterpolator } from './interpolation.js';
 import { Minimap } from './minimap.js';
-import { BikeState, ArenaConfig, DEFAULT_ARENA } from '../shared/types.js';
+import { BikeState, ArenaConfig, DEFAULT_ARENA, PowerUpState } from '../shared/types.js';
 import {
   ServerMessage,
   GameStartMessage,
@@ -14,6 +14,8 @@ import {
   DeathMessage,
   RoomCreatedMessage,
   RoomJoinedMessage,
+  PowerUpSpawnMessage,
+  PowerUpCollectedMessage,
 } from '../shared/protocol.js';
 
 class Game {
@@ -31,6 +33,8 @@ class Game {
   private particles: Particle[] = [];
   private interpolator: BikeInterpolator = new BikeInterpolator();
   private minimap: Minimap = new Minimap();
+  private powerUps: PowerUpState[] = [];
+  private localBoostEndTime: number | null = null;
 
   constructor() {
     this.canvas = new GameCanvas('game-canvas');
@@ -170,7 +174,26 @@ class Game {
         this.renderer.setPlayerDead(false);
         this.interpolator.clear();
         this.minimap.hide();
+        this.powerUps = [];
+        this.localBoostEndTime = null;
         break;
+      case 'power_up_spawn': {
+        const puMsg = msg as PowerUpSpawnMessage;
+        this.powerUps = puMsg.powerUps;
+        break;
+      }
+      case 'power_up_collected': {
+        const collectMsg = msg as PowerUpCollectedMessage;
+        // Remove collected power-up from local state
+        this.powerUps = this.powerUps.map((pu) =>
+          pu.id === collectMsg.powerUpId ? { ...pu, active: false } : pu,
+        );
+        // Track local boost
+        if (collectMsg.playerId === this.localPlayerId) {
+          this.localBoostEndTime = Date.now() + 3000;
+        }
+        break;
+      }
     }
   }
 
@@ -213,9 +236,11 @@ class Game {
     if (this.gameActive) {
       const renderBikes = this.interpolator.getInterpolatedBikes(this.bikes);
       this.renderer.drawGrid(this.arena, renderBikes);
+      this.renderer.drawPowerUps(this.powerUps, this.arena);
       this.renderer.drawBikes(renderBikes);
       this.renderer.drawParticles(this.particles);
-      this.minimap.render(this.arena, renderBikes, this.localPlayerId);
+      this.renderer.drawBoostHUD(this.localBoostEndTime);
+      this.minimap.render(this.arena, renderBikes, this.localPlayerId, this.powerUps);
     } else {
       // Draw background animation when not in game
       this.renderer.drawBackgroundGrid();

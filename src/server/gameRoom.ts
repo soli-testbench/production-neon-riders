@@ -294,13 +294,6 @@ export class GameRoom {
       this.endGameTimeout = null;
       this.state = 'lobby';
       this.bikes.clear();
-      // Clean up AI riders when returning to lobby
-      const botIds = Array.from(this.players.values())
-        .filter((p) => p.isBot)
-        .map((p) => p.id);
-      for (const botId of botIds) {
-        this.players.delete(botId);
-      }
       this.broadcastPlayerList();
     }, 3000);
   }

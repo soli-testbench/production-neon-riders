@@ -126,6 +126,30 @@ export class LobbyUI {
       this.lobbyOverlay.style.display = 'flex';
       this.showMenu();
     });
+
+    // Enter key on name input focuses room code input
+    this.nameInput.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        this.roomCodeInput.focus();
+      }
+    });
+
+    // Enter key on room code input triggers join
+    this.roomCodeInput.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const roomId = this.roomCodeInput.value.trim().toUpperCase();
+        if (!roomId) return;
+        this.saveName();
+        this.network.send({
+          type: 'join',
+          name: this.getName(),
+          color: this.selectedColor,
+          roomId,
+        });
+      }
+    });
   }
 
   private showMenu(): void {

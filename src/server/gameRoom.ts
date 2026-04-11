@@ -32,6 +32,7 @@ export class GameRoom {
   private countdownTimer: ReturnType<typeof setInterval> | null = null;
   private lastTick: number = 0;
   private readonly TICK_RATE = 30; // ticks per second
+  private endGameTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(id: string) {
     this.id = id;
@@ -159,7 +160,7 @@ export class GameRoom {
     // Move all alive bikes
     for (const bike of this.bikes.values()) {
       if (bike.alive) {
-        moveBike(bike, dt * 60); // Scale to 60fps equivalent
+        moveBike(bike, dt);
       }
     }
 
@@ -222,7 +223,8 @@ export class GameRoom {
     this.broadcast(msg);
 
     // Reset to lobby after a delay
-    setTimeout(() => {
+    this.endGameTimeout = setTimeout(() => {
+      this.endGameTimeout = null;
       this.state = 'lobby';
       this.bikes.clear();
       this.broadcastPlayerList();
@@ -230,7 +232,7 @@ export class GameRoom {
   }
 
   private getSpawnPositions(count: number): { x: number; y: number; direction: Direction }[] {
-    const margin = 80;
+    const margin = 240;
     const positions: { x: number; y: number; direction: Direction }[] = [
       { x: margin, y: this.arena.height / 2, direction: 'right' },
       { x: this.arena.width - margin, y: this.arena.height / 2, direction: 'left' },
@@ -281,6 +283,10 @@ export class GameRoom {
     }
     if (this.countdownTimer) {
       clearInterval(this.countdownTimer);
+    }
+    if (this.endGameTimeout) {
+      clearTimeout(this.endGameTimeout);
+      this.endGameTimeout = null;
     }
   }
 }

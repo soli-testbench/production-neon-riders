@@ -31,6 +31,9 @@
   <body>
     <canvas id="game-canvas"></canvas>
 
+    <!-- Connection Status Indicator -->
+    <div id="connection-status" class="connecting">Connecting...</div>
+
     <!-- Lobby Overlay -->
     <div id="lobby-overlay" class="overlay">
       <div class="lobby-container">
@@ -61,6 +64,10 @@
             <span id="room-code-display" class="room-code"></span>
           </div>
           <div id="player-list" class="player-list"></div>
+          <div id="ai-controls" class="ai-controls" style="display:none;">
+            <button id="btn-add-ai" class="neon-btn neon-btn-ai">+ ADD BOT</button>
+            <button id="btn-remove-ai" class="neon-btn neon-btn-ai">- REMOVE BOT</button>
+          </div>
           <button id="btn-start-game" class="neon-btn neon-btn-primary" style="display:none;">START GAME</button>
           <div id="countdown-display" class="countdown" style="display:none;"></div>
           <button id="btn-leave-room" class="neon-btn neon-btn-danger">LEAVE ROOM</button>

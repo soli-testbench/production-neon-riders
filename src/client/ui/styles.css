@@ -211,6 +211,41 @@
   text-shadow: 0 0 5px #ffff0088;
 }
 
+.player-bot-badge {
+  font-size: 0.7rem;
+  color: #00ff99;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  text-shadow: 0 0 5px #00ff9988;
+  background: rgba(0, 255, 153, 0.1);
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 255, 153, 0.3);
+}
+
+.ai-controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.ai-controls .neon-btn {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 0.8rem;
+}
+
+.neon-btn-ai {
+  border-color: rgba(0, 255, 153, 0.5);
+  color: #00ff99;
+}
+
+.neon-btn-ai:hover {
+  background: rgba(0, 255, 153, 0.1);
+  box-shadow: 0 0 15px rgba(0, 255, 153, 0.3);
+  border-color: #00ff99;
+}
+
 .countdown {
   font-size: 4rem;
   font-weight: 900;
@@ -269,6 +304,63 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
+}
+
+/* Connection status indicator */
+#connection-status {
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  padding: 6px 16px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: all 0.3s;
+  pointer-events: none;
+}
+
+#connection-status.connected {
+  background: rgba(0, 255, 0, 0.1);
+  color: #00ff00;
+  border: 1px solid rgba(0, 255, 0, 0.3);
+  opacity: 0;
+}
+
+#connection-status.connecting {
+  background: rgba(255, 255, 0, 0.1);
+  color: #ffff00;
+  border: 1px solid rgba(255, 255, 0, 0.3);
+  opacity: 1;
+}
+
+#connection-status.disconnected {
+  background: rgba(255, 0, 0, 0.1);
+  color: #ff0066;
+  border: 1px solid rgba(255, 0, 0, 0.3);
+  opacity: 1;
+}
+
+#connection-status .retry-btn {
+  display: inline-block;
+  margin-left: 10px;
+  padding: 4px 10px;
+  background: rgba(255, 0, 102, 0.2);
+  border: 1px solid #ff0066;
+  border-radius: 3px;
+  color: #ff0066;
+  font-size: 0.7rem;
+  cursor: pointer;
+  pointer-events: auto;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+#connection-status .retry-btn:hover {
+  background: rgba(255, 0, 102, 0.3);
 }
 
 /* Responsive */

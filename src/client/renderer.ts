@@ -1,6 +1,7 @@
 import { GameCanvas } from './canvas.js';
 import { BikeState, ArenaConfig, Point, sanitizeColor, MAX_TRAIL_LENGTH } from '../shared/types.js';
 import { getTrailLength } from '../shared/bike.js';
+import type { Particle } from './main.js';
 
 export class Renderer {
   private gameCanvas: GameCanvas;
@@ -194,7 +195,7 @@ export class Renderer {
     // Draw trail with fade effect for segments near removal threshold
     if (bike.trail.length > 1) {
       const totalTrailLen = getTrailLength(bike.trail);
-      const fadeFraction = 0.3;
+      const fadeFraction = 0.4;
       const fadeLength = MAX_TRAIL_LENGTH * fadeFraction;
 
       let accumulatedDist = 0;
@@ -213,10 +214,11 @@ export class Renderer {
         }
 
         // Calculate fade alpha based on position in trail
+        // Oldest segments fade smoothly to 0.0 before being trimmed
         let alpha = 1.0;
         if (totalTrailLen > MAX_TRAIL_LENGTH * 0.5) {
           if (accumulatedDist < fadeLength) {
-            alpha = 0.15 + 0.85 * (accumulatedDist / fadeLength);
+            alpha = accumulatedDist / fadeLength;
           }
         }
 
@@ -341,6 +343,43 @@ export class Renderer {
       ctx.moveTo(0, y);
       ctx.lineTo(w, y);
       ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  drawParticles(particles: Particle[]): void {
+    if (particles.length === 0) return;
+
+    const ctx = this.ctx;
+    ctx.save();
+    this.applyCamera(ctx);
+
+    const camOffX = -this.cameraX;
+    const camOffY = -this.cameraY;
+
+    for (const p of particles) {
+      const alpha = Math.max(0, p.life);
+      if (alpha <= 0) continue;
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = p.color;
+      ctx.shadowColor = p.color;
+      ctx.shadowBlur = 15 * alpha;
+
+      ctx.beginPath();
+      ctx.arc(camOffX + p.x, camOffY + p.y, p.size * (0.5 + alpha * 0.5), 0, Math.PI * 2);
+      ctx.fill();
+
+      // Extra glow layer
+      ctx.globalAlpha = alpha * 0.4;
+      ctx.shadowBlur = 25 * alpha;
+      ctx.beginPath();
+      ctx.arc(camOffX + p.x, camOffY + p.y, p.size * (0.8 + alpha * 0.5), 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
     }
 
     ctx.restore();

@@ -30,8 +30,8 @@ export interface ArenaConfig {
 }
 
 export const DEFAULT_ARENA: ArenaConfig = {
-  width: 800,
-  height: 600,
+  width: 2400,
+  height: 1800,
   gridSize: 20,
 };
 
@@ -46,7 +46,10 @@ export const NEON_COLORS = [
   '#00ff99', // mint
 ];
 
-export const BIKE_SPEED = 3;
+export const BIKE_SPEED = 180;
+
+/** Maximum trail length in distance units before oldest segments are trimmed */
+export const MAX_TRAIL_LENGTH = 3000;
 
 export function isValidNeonColor(color: string): boolean {
   return NEON_COLORS.includes(color);

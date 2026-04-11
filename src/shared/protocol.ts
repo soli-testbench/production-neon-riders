@@ -27,12 +27,22 @@ export interface LeaveRoomMessage {
   type: 'leave_room';
 }
 
+export interface AddAiMessage {
+  type: 'add_ai';
+}
+
+export interface RemoveAiMessage {
+  type: 'remove_ai';
+}
+
 export type ClientMessage =
   | JoinMessage
   | CreateRoomMessage
   | InputMessage
   | StartGameMessage
-  | LeaveRoomMessage;
+  | LeaveRoomMessage
+  | AddAiMessage
+  | RemoveAiMessage;
 
 // Server -> Client messages
 export interface RoomCreatedMessage {
@@ -51,7 +61,7 @@ export interface RoomJoinedMessage {
 
 export interface PlayerListMessage {
   type: 'player_list';
-  players: { id: string; name: string; color: string; isHost: boolean }[];
+  players: { id: string; name: string; color: string; isHost: boolean; isBot: boolean }[];
 }
 
 export interface CountdownMessage {

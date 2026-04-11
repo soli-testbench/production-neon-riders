@@ -121,6 +121,19 @@ export class LobbyUI {
       this.showMenu();
     });
 
+    const addAiBtn = document.getElementById('btn-add-ai');
+    const removeAiBtn = document.getElementById('btn-remove-ai');
+    if (addAiBtn) {
+      addAiBtn.addEventListener('click', () => {
+        this.network.send({ type: 'add_ai' });
+      });
+    }
+    if (removeAiBtn) {
+      removeAiBtn.addEventListener('click', () => {
+        this.network.send({ type: 'remove_ai' });
+      });
+    }
+
     this.backLobbyBtn.addEventListener('click', () => {
       this.gameoverOverlay.style.display = 'none';
       this.lobbyOverlay.style.display = 'flex';
@@ -168,10 +181,13 @@ export class LobbyUI {
     (document.getElementById('name-section') as HTMLElement).style.display = 'none';
     (document.getElementById('color-section') as HTMLElement).style.display = 'none';
 
+    const aiControls = document.getElementById('ai-controls') as HTMLElement;
     if (this.isHost) {
       this.startBtn.style.display = '';
+      if (aiControls) aiControls.style.display = '';
     } else {
       this.startBtn.style.display = 'none';
+      if (aiControls) aiControls.style.display = 'none';
     }
   }
 
@@ -220,7 +236,7 @@ export class LobbyUI {
     }
   }
 
-  private renderPlayerList(players: { id: string; name: string; color: string; isHost: boolean }[]): void {
+  private renderPlayerList(players: { id: string; name: string; color: string; isHost: boolean; isBot: boolean }[]): void {
     while (this.playerList.firstChild) this.playerList.removeChild(this.playerList.firstChild);
     players.forEach((p) => {
       const item = document.createElement('div');
@@ -238,6 +254,13 @@ export class LobbyUI {
 
       item.appendChild(dot);
       item.appendChild(nameSpan);
+
+      if (p.isBot) {
+        const badge = document.createElement('span');
+        badge.className = 'player-bot-badge';
+        badge.textContent = 'BOT';
+        item.appendChild(badge);
+      }
 
       if (p.isHost) {
         const badge = document.createElement('span');

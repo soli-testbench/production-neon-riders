@@ -1,5 +1,5 @@
 import { GameCanvas } from './canvas.js';
-import { BikeState, ArenaConfig, Point, PowerUpState, sanitizeColor, MAX_TRAIL_LENGTH } from '../shared/types.js';
+import { BikeState, ArenaConfig, Point, PowerUpState, RampState, sanitizeColor } from '../shared/types.js';
 import { getTrailLength } from '../shared/bike.js';
 import type { Particle } from './main.js';
 
@@ -10,9 +10,12 @@ export class Renderer {
   private localPlayerId: string | null = null;
   private playerDead = false;
   private deathZoom = 1;
+  private readonly BASE_ZOOM = 2.5;
   private readonly DEATH_ZOOM_TARGET = 0.5;
   private readonly DEATH_ZOOM_SPEED = 0.02;
   private powerUpPulse = 0;
+  private trailDissolvePhase = 0;
+  private rampPulse = 0;
 
   constructor(gameCanvas: GameCanvas) {
     this.gameCanvas = gameCanvas;
@@ -29,9 +32,10 @@ export class Renderer {
   setPlayerDead(dead: boolean): void {
     if (dead && !this.playerDead) {
       this.playerDead = true;
+      this.deathZoom = this.BASE_ZOOM;
     } else if (!dead) {
       this.playerDead = false;
-      this.deathZoom = 1;
+      this.deathZoom = this.BASE_ZOOM;
     }
   }
 
@@ -44,7 +48,7 @@ export class Renderer {
     if (!this.playerDead) {
       const viewW = this.gameCanvas.getWidth();
       const viewH = this.gameCanvas.getHeight();
-      const leadOffset = 0.1;
+      const leadOffset = 0.25;
 
       let offsetX = 0;
       let offsetY = 0;
@@ -81,10 +85,14 @@ export class Renderer {
     this.gameCanvas.clear();
   }
 
+  private getEffectiveZoom(): number {
+    return this.playerDead ? this.deathZoom : this.BASE_ZOOM;
+  }
+
   private getVisibleBounds(): { visLeft: number; visTop: number; visRight: number; visBottom: number } {
     const viewW = this.gameCanvas.getWidth();
     const viewH = this.gameCanvas.getHeight();
-    const effectiveZoom = this.playerDead ? this.deathZoom : 1;
+    const effectiveZoom = this.getEffectiveZoom();
     const visLeft = this.cameraX - viewW * (1 / effectiveZoom - 1) / 2;
     const visTop = this.cameraY - viewH * (1 / effectiveZoom - 1) / 2;
     const visRight = visLeft + viewW / effectiveZoom;
@@ -95,12 +103,13 @@ export class Renderer {
   private applyCamera(ctx: CanvasRenderingContext2D): void {
     const viewW = this.gameCanvas.getWidth();
     const viewH = this.gameCanvas.getHeight();
+    const effectiveZoom = this.getEffectiveZoom();
 
-    if (this.playerDead && this.deathZoom < 1) {
+    if (effectiveZoom !== 1) {
       const centerX = viewW / 2;
       const centerY = viewH / 2;
       ctx.translate(centerX, centerY);
-      ctx.scale(this.deathZoom, this.deathZoom);
+      ctx.scale(effectiveZoom, effectiveZoom);
       ctx.translate(-centerX, -centerY);
     }
   }
@@ -193,11 +202,11 @@ export class Renderer {
     const ctx = this.ctx;
     const color = sanitizeColor(bike.color);
 
-    // Draw trail with fade effect for segments near removal threshold
+    // Draw trail with fade effect — always show visible fade gradient at tail end
     if (bike.trail.length > 1) {
       const totalTrailLen = getTrailLength(bike.trail);
       const fadeFraction = 0.4;
-      const fadeLength = MAX_TRAIL_LENGTH * fadeFraction;
+      const fadeLength = totalTrailLen * fadeFraction;
 
       let accumulatedDist = 0;
 
@@ -214,13 +223,11 @@ export class Renderer {
           continue;
         }
 
-        // Calculate fade alpha based on position in trail
-        // Oldest segments fade smoothly to 0.0 before being trimmed
+        // Always apply fade gradient at the tail end (oldest segments)
         let alpha = 1.0;
-        if (totalTrailLen > MAX_TRAIL_LENGTH * 0.5) {
-          if (accumulatedDist < fadeLength) {
-            alpha = accumulatedDist / fadeLength;
-          }
+        if (accumulatedDist < fadeLength && fadeLength > 0) {
+          alpha = accumulatedDist / fadeLength;
+          alpha = Math.max(0.05, alpha); // minimum visibility
         }
 
         ctx.save();
@@ -245,11 +252,16 @@ export class Renderer {
 
         ctx.restore();
 
+        // Draw dissolve sparkle particles at the very tail of the trail
+        if (i === 0 && accumulatedDist < 10) {
+          this.drawTrailDissolveEffect(ctx, camOffX + a.x, camOffY + a.y, color);
+        }
+
         accumulatedDist += segLen;
       }
 
-      // Draw live segment (last trail point to current position) if alive
-      if (bike.alive) {
+      // Draw live segment (last trail point to current position) if alive and not jumping
+      if (bike.alive && !bike.jumping) {
         const lastPt = bike.trail[bike.trail.length - 1];
         if (this.isSegmentVisible(lastPt.x, lastPt.y, bike.x, bike.y, visLeft, visTop, visRight, visBottom)) {
           ctx.save();
@@ -285,7 +297,8 @@ export class Renderer {
       ) {
         const cx = camOffX + bike.x;
         const cy = camOffY + bike.y;
-        const size = 6;
+        const isJumping = bike.jumping;
+        const size = isJumping ? 9 : 6; // Larger when jumping
 
         // Rotation angle based on direction
         let angle = 0;
@@ -304,13 +317,23 @@ export class Renderer {
             break;
         }
 
+        // Draw shadow underneath when jumping
+        if (isJumping) {
+          ctx.save();
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+          ctx.beginPath();
+          ctx.ellipse(cx + 3, cy + 3, 8, 5, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+
         // Outer white glow arrow
         ctx.save();
         ctx.translate(cx, cy);
         ctx.rotate(angle);
         ctx.fillStyle = '#ffffff';
         ctx.shadowColor = color;
-        ctx.shadowBlur = 20;
+        ctx.shadowBlur = isJumping ? 30 : 20;
 
         ctx.beginPath();
         ctx.moveTo(size, 0);
@@ -322,7 +345,7 @@ export class Renderer {
 
         // Inner colored arrow
         ctx.fillStyle = color;
-        ctx.shadowBlur = 10;
+        ctx.shadowBlur = isJumping ? 15 : 10;
         const inner = 0.7;
         ctx.beginPath();
         ctx.moveTo(size * inner, 0);
@@ -539,6 +562,135 @@ export class Renderer {
     ctx.shadowBlur = 0;
     ctx.strokeRect(x, y, barWidth, barHeight);
 
+    ctx.restore();
+  }
+
+  private drawTrailDissolveEffect(ctx: CanvasRenderingContext2D, x: number, y: number, color: string): void {
+    this.trailDissolvePhase += 0.03;
+    const sparkleCount = 5;
+    for (let i = 0; i < sparkleCount; i++) {
+      const angle = (Math.PI * 2 * i) / sparkleCount + this.trailDissolvePhase;
+      const radius = 4 + Math.sin(this.trailDissolvePhase * 2 + i) * 3;
+      const sx = x + Math.cos(angle) * radius;
+      const sy = y + Math.sin(angle) * radius;
+      const sparkleAlpha = 0.4 + 0.3 * Math.sin(this.trailDissolvePhase * 3 + i * 1.5);
+
+      ctx.save();
+      ctx.globalAlpha = sparkleAlpha;
+      ctx.fillStyle = color;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.arc(sx, sy, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Central dissolve glow
+    ctx.save();
+    ctx.globalAlpha = 0.3 + 0.2 * Math.sin(this.trailDissolvePhase * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 15;
+    ctx.beginPath();
+    ctx.arc(x, y, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  drawRamps(ramps: RampState[], _arena: ArenaConfig): void {
+    if (ramps.length === 0) return;
+
+    const ctx = this.ctx;
+    this.rampPulse += 0.04;
+
+    ctx.save();
+    this.applyCamera(ctx);
+
+    const camOffX = -this.cameraX;
+    const camOffY = -this.cameraY;
+    const { visLeft, visTop, visRight, visBottom } = this.getVisibleBounds();
+
+    for (const ramp of ramps) {
+      // Culling
+      if (
+        ramp.x < visLeft - ramp.width &&
+        ramp.x > visRight + ramp.width &&
+        ramp.y < visTop - ramp.height &&
+        ramp.y > visBottom + ramp.height
+      ) continue;
+
+      const rx = camOffX + ramp.x;
+      const ry = camOffY + ramp.y;
+      const halfW = ramp.width / 2;
+      const halfH = ramp.height / 2;
+      const pulse = 0.6 + 0.4 * Math.sin(this.rampPulse);
+
+      // Determine rotation angle based on ramp direction
+      let angle = 0;
+      switch (ramp.direction) {
+        case 'right': angle = 0; break;
+        case 'down': angle = Math.PI / 2; break;
+        case 'left': angle = Math.PI; break;
+        case 'up': angle = -Math.PI / 2; break;
+      }
+
+      ctx.save();
+      ctx.translate(rx, ry);
+      ctx.rotate(angle);
+
+      // Outer glow
+      ctx.fillStyle = `rgba(0, 255, 200, ${0.15 * pulse})`;
+      ctx.shadowColor = '#00ffc8';
+      ctx.shadowBlur = 20 * pulse;
+      ctx.fillRect(-halfW - 4, -halfH - 4, ramp.width + 8, ramp.height + 8);
+
+      // Ramp base
+      ctx.fillStyle = `rgba(0, 255, 200, ${0.25 * pulse})`;
+      ctx.shadowBlur = 10;
+      ctx.fillRect(-halfW, -halfH, ramp.width, ramp.height);
+
+      // Border
+      ctx.strokeStyle = `rgba(0, 255, 200, ${0.7 * pulse})`;
+      ctx.lineWidth = 1.5;
+      ctx.shadowBlur = 8;
+      ctx.strokeRect(-halfW, -halfH, ramp.width, ramp.height);
+
+      // Chevron arrows pointing in the ramp direction
+      ctx.strokeStyle = `rgba(255, 255, 255, ${0.6 * pulse})`;
+      ctx.lineWidth = 2;
+      ctx.shadowColor = '#00ffc8';
+      ctx.shadowBlur = 6;
+      for (let c = 0; c < 3; c++) {
+        const offset = -halfW * 0.5 + c * halfW * 0.5;
+        ctx.beginPath();
+        ctx.moveTo(offset - 5, -halfH * 0.5);
+        ctx.lineTo(offset + 5, 0);
+        ctx.lineTo(offset - 5, halfH * 0.5);
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
+
+  drawVignette(): void {
+    const ctx = this.ctx;
+    const w = this.gameCanvas.getWidth();
+    const h = this.gameCanvas.getHeight();
+
+    // Radial gradient vignette from transparent center to dark edges
+    const gradient = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.3, w / 2, h / 2, Math.max(w, h) * 0.7);
+    gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    gradient.addColorStop(0.6, 'rgba(0, 0, 0, 0)');
+    gradient.addColorStop(0.85, 'rgba(0, 0, 10, 0.3)');
+    gradient.addColorStop(1, 'rgba(0, 0, 10, 0.7)');
+
+    ctx.save();
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, w, h);
     ctx.restore();
   }
 

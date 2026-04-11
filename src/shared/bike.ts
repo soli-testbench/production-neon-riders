@@ -56,11 +56,38 @@ export function moveBike(bike: BikeState, dt: number): void {
       break;
   }
 
-  // Add trail point if direction matters for rendering
+  // While jumping, do not add trail points
+  if (bike.jumping) {
+    // If this is the first frame of a jump, cap the trail at current position
+    const lastTrail = bike.trail[bike.trail.length - 1];
+    if (lastTrail) {
+      const dx = Math.abs(prevX - lastTrail.x);
+      const dy = Math.abs(prevY - lastTrail.y);
+      if (dx > 1 || dy > 1) {
+        // Only add the pre-jump position once to close the trail segment
+        bike.trail.push({ x: prevX, y: prevY });
+      }
+    }
+    trimTrail(bike);
+    return;
+  }
+
+  // If we just landed from a jump, start a new trail segment at current position
   const lastTrail = bike.trail[bike.trail.length - 1];
   if (lastTrail) {
-    const dx = Math.abs(bike.x - lastTrail.x);
-    const dy = Math.abs(bike.y - lastTrail.y);
+    const gapX = Math.abs(bike.x - lastTrail.x);
+    const gapY = Math.abs(bike.y - lastTrail.y);
+    // If there's a large gap (from jumping), insert current position to start new segment
+    if (gapX > 20 || gapY > 20) {
+      bike.trail.push({ x: prevX, y: prevY });
+    }
+  }
+
+  // Add trail point if direction matters for rendering
+  const lastTrail2 = bike.trail[bike.trail.length - 1];
+  if (lastTrail2) {
+    const dx = Math.abs(bike.x - lastTrail2.x);
+    const dy = Math.abs(bike.y - lastTrail2.y);
     // Add intermediate points for smooth trail rendering at turns
     if (dx > 0 && dy > 0) {
       bike.trail.push({ x: prevX, y: prevY });

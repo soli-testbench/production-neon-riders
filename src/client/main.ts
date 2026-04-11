@@ -7,7 +7,7 @@ import { LobbyUI } from './ui/lobby.js';
 import { BikeInterpolator } from './interpolation.js';
 import { Minimap } from './minimap.js';
 import { KillFeed } from './killFeed.js';
-import { BikeState, ArenaConfig, DEFAULT_ARENA, PowerUpState } from '../shared/types.js';
+import { BikeState, ArenaConfig, DEFAULT_ARENA, PowerUpState, RampState } from '../shared/types.js';
 import {
   ServerMessage,
   GameStartMessage,
@@ -37,6 +37,7 @@ class Game {
   private minimap: Minimap = new Minimap();
   private killFeed: KillFeed = new KillFeed();
   private powerUps: PowerUpState[] = [];
+  private ramps: RampState[] = [];
   private localBoostEndTime: number | null = null;
 
   constructor() {
@@ -144,6 +145,7 @@ class Game {
         const startMsg = msg as GameStartMessage;
         this.arena = startMsg.arena;
         this.bikes = startMsg.bikes;
+        this.ramps = startMsg.ramps || [];
         this.gameActive = true;
         this.renderer.setPlayerDead(false);
         this.interpolator.clear();
@@ -182,6 +184,7 @@ class Game {
         this.minimap.hide();
         this.killFeed.hide();
         this.powerUps = [];
+        this.ramps = [];
         this.localBoostEndTime = null;
         this.lobby.showGameOverWithResults(gameOverMsg.winnerName, gameOverMsg.results || []);
         break;
@@ -245,9 +248,11 @@ class Game {
     if (this.gameActive) {
       const renderBikes = this.interpolator.getInterpolatedBikes(this.bikes);
       this.renderer.drawGrid(this.arena, renderBikes);
+      this.renderer.drawRamps(this.ramps, this.arena);
       this.renderer.drawPowerUps(this.powerUps, this.arena);
       this.renderer.drawBikes(renderBikes);
       this.renderer.drawParticles(this.particles);
+      this.renderer.drawVignette();
       this.renderer.drawBoostHUD(this.localBoostEndTime);
       this.minimap.render(this.arena, renderBikes, this.localPlayerId, this.powerUps);
     } else {

@@ -23,6 +23,8 @@ export interface BikeState {
   name: string;
   speedMultiplier?: number;
   boostEndTime?: number;
+  jumping?: boolean;
+  jumpEndTime?: number;
 }
 
 export interface PowerUpState {
@@ -31,6 +33,15 @@ export interface PowerUpState {
   y: number;
   type: 'speed_boost';
   active: boolean;
+}
+
+export interface RampState {
+  id: string;
+  x: number;
+  y: number;
+  direction: Direction;
+  width: number;
+  height: number;
 }
 
 export interface ArenaConfig {
@@ -67,7 +78,14 @@ export const POWER_UP_COUNT_MAX = 5;
 export const POWER_UP_SPAWN_MARGIN = 100;
 
 /** Maximum trail length in distance units before oldest segments are trimmed */
-export const MAX_TRAIL_LENGTH = 3000;
+export const MAX_TRAIL_LENGTH = 2000;
+
+export const RAMP_COUNT_MIN = 3;
+export const RAMP_COUNT_MAX = 5;
+export const RAMP_WIDTH = 60;
+export const RAMP_HEIGHT = 30;
+export const RAMP_SPAWN_MARGIN = 150;
+export const JUMP_DURATION_MS = 500;
 
 export function isValidNeonColor(color: string): boolean {
   return NEON_COLORS.includes(color);

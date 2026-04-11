@@ -274,7 +274,7 @@ export class Renderer {
       }
     }
 
-    // Draw bike head
+    // Draw bike head as directional arrow
     if (bike.alive) {
       if (
         bike.x >= visLeft - 20 &&
@@ -282,20 +282,53 @@ export class Renderer {
         bike.y >= visTop - 20 &&
         bike.y <= visBottom + 20
       ) {
+        const cx = camOffX + bike.x;
+        const cy = camOffY + bike.y;
+        const size = 6;
+
+        // Rotation angle based on direction
+        let angle = 0;
+        switch (bike.direction) {
+          case 'right':
+            angle = 0;
+            break;
+          case 'down':
+            angle = Math.PI / 2;
+            break;
+          case 'left':
+            angle = Math.PI;
+            break;
+          case 'up':
+            angle = -Math.PI / 2;
+            break;
+        }
+
+        // Outer white glow arrow
         ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(angle);
         ctx.fillStyle = '#ffffff';
         ctx.shadowColor = color;
         ctx.shadowBlur = 20;
 
-        const size = 6;
         ctx.beginPath();
-        ctx.arc(camOffX + bike.x, camOffY + bike.y, size, 0, Math.PI * 2);
+        ctx.moveTo(size, 0);
+        ctx.lineTo(-size * 0.7, -size * 0.7);
+        ctx.lineTo(-size * 0.3, 0);
+        ctx.lineTo(-size * 0.7, size * 0.7);
+        ctx.closePath();
         ctx.fill();
 
+        // Inner colored arrow
         ctx.fillStyle = color;
         ctx.shadowBlur = 10;
+        const inner = 0.7;
         ctx.beginPath();
-        ctx.arc(camOffX + bike.x, camOffY + bike.y, size - 2, 0, Math.PI * 2);
+        ctx.moveTo(size * inner, 0);
+        ctx.lineTo(-size * 0.7 * inner, -size * 0.7 * inner);
+        ctx.lineTo(-size * 0.3 * inner, 0);
+        ctx.lineTo(-size * 0.7 * inner, size * 0.7 * inner);
+        ctx.closePath();
         ctx.fill();
 
         ctx.restore();

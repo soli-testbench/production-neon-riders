@@ -1,6 +1,6 @@
 import { NEON_COLORS, sanitizeColor } from '../../shared/types.js';
 import { NetworkClient } from '../network.js';
-import { ServerMessage } from '../../shared/protocol.js';
+import { ServerMessage, PlayerResult } from '../../shared/protocol.js';
 
 export class LobbyUI {
   private network: NetworkClient;
@@ -261,11 +261,11 @@ export class LobbyUI {
       }
 
       case 'game_over':
-        this.showGameOver(msg.winnerName);
+        // Results display handled by main.ts via showGameOverWithResults
         break;
 
       case 'error':
-        alert(msg.message);
+        this.showErrorNotification(msg.message);
         break;
     }
   }
@@ -336,6 +336,109 @@ export class LobbyUI {
       : 'Draw!';
     // Show Play Again button only for host
     this.playAgainBtn.style.display = this.isHost ? '' : 'none';
+  }
+
+  showGameOverWithResults(winnerName: string, results: PlayerResult[]): void {
+    this.showGameOver(winnerName);
+
+    // Remove any existing results table
+    const existing = this.gameoverOverlay.querySelector('.results-table');
+    if (existing) existing.remove();
+
+    if (results.length === 0) return;
+
+    // Build results table
+    const table = document.createElement('table');
+    table.className = 'results-table';
+
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    for (const label of ['#', 'Player', 'Time']) {
+      const th = document.createElement('th');
+      th.textContent = label;
+      headerRow.appendChild(th);
+    }
+    thead.appendChild(headerRow);
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    for (const result of results) {
+      const row = document.createElement('tr');
+      const safeColor = sanitizeColor(result.color);
+      row.style.setProperty('--row-color', safeColor);
+
+      if (result.placement === 1) {
+        row.className = 'results-row-winner';
+      }
+
+      // Placement
+      const tdPlace = document.createElement('td');
+      tdPlace.textContent = String(result.placement);
+      row.appendChild(tdPlace);
+
+      // Name with color dot
+      const tdName = document.createElement('td');
+      const nameCell = document.createElement('div');
+      nameCell.className = 'results-name-cell';
+      const dot = document.createElement('div');
+      dot.className = 'results-color-dot';
+      dot.style.backgroundColor = safeColor;
+      dot.style.boxShadow = `0 0 6px ${safeColor}`;
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = result.name;
+      nameSpan.style.color = safeColor;
+      nameCell.appendChild(dot);
+      nameCell.appendChild(nameSpan);
+      tdName.appendChild(nameCell);
+      row.appendChild(tdName);
+
+      // Survival time formatted as m:ss
+      const tdTime = document.createElement('td');
+      const totalSec = Math.floor(result.survivalTime / 1000);
+      const minutes = Math.floor(totalSec / 60);
+      const seconds = totalSec % 60;
+      tdTime.textContent = `${minutes}:${String(seconds).padStart(2, '0')}`;
+      row.appendChild(tdTime);
+
+      tbody.appendChild(row);
+    }
+    table.appendChild(tbody);
+
+    // Insert table before the buttons
+    const container = this.gameoverOverlay.querySelector('.gameover-container')!;
+    const playAgainBtn = container.querySelector('#btn-play-again')!;
+    container.insertBefore(table, playAgainBtn);
+  }
+
+  private showErrorNotification(message: string): void {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = 'neon-error-notification';
+    notification.textContent = message;
+
+    // Find or create a container for notifications inside the lobby
+    let container = document.getElementById('error-notification-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'error-notification-container';
+      container.className = 'error-notification-container';
+      this.lobbyOverlay.appendChild(container);
+    }
+
+    container.appendChild(notification);
+
+    // Trigger reflow so CSS transition works
+    notification.offsetHeight;
+    notification.classList.add('visible');
+
+    // Auto-dismiss after 3.5 seconds
+    setTimeout(() => {
+      notification.classList.remove('visible');
+      notification.classList.add('fade-out');
+      notification.addEventListener('transitionend', () => {
+        notification.remove();
+      });
+    }, 3500);
   }
 
   setOnGameStart(cb: () => void): void {

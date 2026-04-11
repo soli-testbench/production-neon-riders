@@ -87,10 +87,19 @@ export interface DeathMessage {
   reason: string;
 }
 
+export interface PlayerResult {
+  playerId: string;
+  name: string;
+  color: string;
+  placement: number;
+  survivalTime: number; // milliseconds
+}
+
 export interface GameOverMessage {
   type: 'game_over';
   winnerId: string | null;
   winnerName: string;
+  results: PlayerResult[];
 }
 
 export interface ErrorMessage {

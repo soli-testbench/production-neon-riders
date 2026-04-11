@@ -99,7 +99,7 @@ export class BikeInterpolator {
     // Cap extrapolation to avoid bikes flying off-screen
     const cappedElapsed = Math.min(elapsed, 0.1);
     const vec = DIRECTION_VECTORS[snapshot.direction];
-    const distance = BIKE_SPEED * cappedElapsed;
+    const distance = BIKE_SPEED * (bike.speedMultiplier ?? 1) * cappedElapsed;
 
     return {
       ...bike,

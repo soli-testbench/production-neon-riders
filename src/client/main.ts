@@ -6,12 +6,14 @@ import { NetworkClient, ConnectionStatus } from './network.js';
 import { LobbyUI } from './ui/lobby.js';
 import { BikeInterpolator } from './interpolation.js';
 import { Minimap } from './minimap.js';
+import { KillFeed } from './killFeed.js';
 import { BikeState, ArenaConfig, DEFAULT_ARENA, PowerUpState } from '../shared/types.js';
 import {
   ServerMessage,
   GameStartMessage,
   StateUpdateMessage,
   DeathMessage,
+  GameOverMessage,
   RoomCreatedMessage,
   RoomJoinedMessage,
   PowerUpSpawnMessage,
@@ -33,6 +35,7 @@ class Game {
   private particles: Particle[] = [];
   private interpolator: BikeInterpolator = new BikeInterpolator();
   private minimap: Minimap = new Minimap();
+  private killFeed: KillFeed = new KillFeed();
   private powerUps: PowerUpState[] = [];
   private localBoostEndTime: number | null = null;
 
@@ -146,6 +149,7 @@ class Game {
         this.interpolator.clear();
         this.interpolator.pushServerState(this.bikes, performance.now());
         this.minimap.show();
+        this.killFeed.show();
         break;
       }
       case 'state_update': {
@@ -166,17 +170,22 @@ class Game {
         const deadBike = this.bikes.find((b) => b.id === deathMsg.playerId);
         if (deadBike) {
           this.spawnDeathParticles(deadBike.x, deadBike.y, deadBike.color);
+          this.killFeed.addEntry(deadBike.name, deadBike.color, deathMsg.reason);
         }
         break;
       }
-      case 'game_over':
+      case 'game_over': {
+        const gameOverMsg = msg as GameOverMessage;
         this.gameActive = false;
         this.renderer.setPlayerDead(false);
         this.interpolator.clear();
         this.minimap.hide();
+        this.killFeed.hide();
         this.powerUps = [];
         this.localBoostEndTime = null;
+        this.lobby.showGameOverWithResults(gameOverMsg.winnerName, gameOverMsg.results || []);
         break;
+      }
       case 'power_up_spawn': {
         const puMsg = msg as PowerUpSpawnMessage;
         this.powerUps = puMsg.powerUps;

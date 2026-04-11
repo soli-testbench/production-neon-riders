@@ -31,6 +31,10 @@ export class LobbyUI {
   private hud: HTMLElement;
   private hudPlayers: HTMLElement;
 
+  // HUD caching to avoid DOM thrashing
+  private cachedHudState: Map<string, { name: string; color: string; alive: boolean; element: HTMLElement }> = new Map();
+  private cachedHudOrder: string[] = [];
+
   constructor(network: NetworkClient) {
     this.network = network;
     this.selectedColor = NEON_COLORS[0];
@@ -308,24 +312,54 @@ export class LobbyUI {
   }
 
   private updateHUD(bikes: { id: string; name: string; color: string; alive: boolean }[]): void {
-    while (this.hudPlayers.firstChild) this.hudPlayers.removeChild(this.hudPlayers.firstChild);
-    bikes.forEach((b) => {
-      const el = document.createElement('div');
-      el.className = 'hud-player' + (b.alive ? '' : ' dead');
+    const newOrder = bikes.map((b) => b.id);
 
-      const dot = document.createElement('div');
-      dot.className = 'hud-dot';
-      const safeColor = sanitizeColor(b.color);
-      dot.style.backgroundColor = safeColor;
-      dot.style.boxShadow = `0 0 4px ${safeColor}`;
+    // Check if player list changed (added/removed/reordered)
+    const orderChanged =
+      newOrder.length !== this.cachedHudOrder.length ||
+      newOrder.some((id, i) => id !== this.cachedHudOrder[i]);
 
-      const nameSpan = document.createElement('span');
-      nameSpan.textContent = b.name;
+    if (orderChanged) {
+      // Full rebuild needed — player list changed
+      while (this.hudPlayers.firstChild) this.hudPlayers.removeChild(this.hudPlayers.firstChild);
+      this.cachedHudState.clear();
 
-      el.appendChild(dot);
-      el.appendChild(nameSpan);
-      this.hudPlayers.appendChild(el);
-    });
+      for (const b of bikes) {
+        const el = document.createElement('div');
+        el.className = 'hud-player' + (b.alive ? '' : ' dead');
+
+        const dot = document.createElement('div');
+        dot.className = 'hud-dot';
+        const safeColor = sanitizeColor(b.color);
+        dot.style.backgroundColor = safeColor;
+        dot.style.boxShadow = `0 0 4px ${safeColor}`;
+
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = b.name;
+
+        el.appendChild(dot);
+        el.appendChild(nameSpan);
+        this.hudPlayers.appendChild(el);
+
+        this.cachedHudState.set(b.id, { name: b.name, color: b.color, alive: b.alive, element: el });
+      }
+      this.cachedHudOrder = newOrder;
+    } else {
+      // Only update alive/dead state changes via CSS class toggling
+      for (const b of bikes) {
+        const cached = this.cachedHudState.get(b.id);
+        if (!cached) continue;
+
+        if (cached.alive !== b.alive) {
+          cached.alive = b.alive;
+          if (b.alive) {
+            cached.element.classList.remove('dead');
+          } else {
+            cached.element.classList.add('dead');
+          }
+        }
+      }
+    }
   }
 
   private showGameOver(winnerName: string): void {

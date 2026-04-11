@@ -1,4 +1,4 @@
-import { BikeState, Direction, PowerUpState } from './types.js';
+import { BikeState, Direction, PowerUpState, RampState } from './types.js';
 
 // Client -> Server messages
 export interface JoinMessage {
@@ -73,6 +73,7 @@ export interface GameStartMessage {
   type: 'game_start';
   arena: { width: number; height: number; gridSize: number };
   bikes: BikeState[];
+  ramps: RampState[];
 }
 
 export interface StateUpdateMessage {

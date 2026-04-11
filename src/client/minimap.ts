@@ -1,4 +1,4 @@
-import { BikeState, ArenaConfig, sanitizeColor } from '../shared/types.js';
+import { BikeState, ArenaConfig, PowerUpState, sanitizeColor } from '../shared/types.js';
 
 const MINIMAP_WIDTH = 150;
 const MINIMAP_HEIGHT = 120;
@@ -38,7 +38,7 @@ export class Minimap {
     this.canvas.style.display = 'none';
   }
 
-  render(arena: ArenaConfig, bikes: BikeState[], localPlayerId: string | null): void {
+  render(arena: ArenaConfig, bikes: BikeState[], localPlayerId: string | null, powerUps?: PowerUpState[]): void {
     const ctx = this.ctx;
     const w = MINIMAP_WIDTH;
     const h = MINIMAP_HEIGHT;
@@ -85,6 +85,25 @@ export class Minimap {
       }
       ctx.stroke();
       ctx.restore();
+    }
+
+    // Draw power-up indicators
+    if (powerUps) {
+      for (const pu of powerUps) {
+        if (!pu.active) continue;
+        const pux = pu.x * scaleX;
+        const puy = pu.y * scaleY;
+
+        ctx.save();
+        ctx.fillStyle = '#ffff00';
+        ctx.shadowColor = '#ffff00';
+        ctx.shadowBlur = 3;
+        ctx.globalAlpha = 0.8;
+        ctx.beginPath();
+        ctx.arc(pux, puy, 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
     }
 
     // Draw bike dots

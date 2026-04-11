@@ -7,6 +7,7 @@ export class LobbyUI {
   private selectedColor: string;
   private playerId: string | null = null;
   private isHost = false;
+  private currentRoomId: string | null = null;
   private onGameStart: (() => void) | null = null;
 
   // DOM Elements
@@ -26,6 +27,7 @@ export class LobbyUI {
   private gameoverOverlay: HTMLElement;
   private gameoverMessage: HTMLElement;
   private backLobbyBtn: HTMLElement;
+  private playAgainBtn: HTMLElement;
   private hud: HTMLElement;
   private hudPlayers: HTMLElement;
 
@@ -50,6 +52,7 @@ export class LobbyUI {
     this.gameoverOverlay = document.getElementById('gameover-overlay')!;
     this.gameoverMessage = document.getElementById('gameover-message')!;
     this.backLobbyBtn = document.getElementById('btn-back-lobby')!;
+    this.playAgainBtn = document.getElementById('btn-play-again')!;
     this.hud = document.getElementById('hud')!;
     this.hudPlayers = document.getElementById('hud-players')!;
 
@@ -136,8 +139,17 @@ export class LobbyUI {
 
     this.backLobbyBtn.addEventListener('click', () => {
       this.gameoverOverlay.style.display = 'none';
+      this.hud.style.display = 'none';
       this.lobbyOverlay.style.display = 'flex';
-      this.showMenu();
+      if (this.currentRoomId) {
+        this.showRoom(this.currentRoomId);
+      } else {
+        this.showMenu();
+      }
+    });
+
+    this.playAgainBtn.addEventListener('click', () => {
+      this.network.send({ type: 'start_game' });
     });
 
     // Enter key on name input focuses room code input
@@ -196,18 +208,17 @@ export class LobbyUI {
       case 'room_created':
         this.playerId = msg.playerId;
         this.isHost = msg.isHost;
+        this.currentRoomId = msg.roomId;
         this.showRoom(msg.roomId);
         break;
 
       case 'room_joined':
         this.playerId = msg.playerId;
         this.isHost = msg.isHost;
+        this.currentRoomId = msg.roomId;
         this.showRoom(msg.roomId);
         break;
 
-      case 'player_list':
-        this.renderPlayerList(msg.players);
-        break;
 
       case 'countdown':
         this.countdownDisplay.style.display = '';
@@ -225,6 +236,29 @@ export class LobbyUI {
       case 'state_update':
         this.updateHUD(msg.bikes);
         break;
+
+      case 'player_list': {
+        this.renderPlayerList(msg.players);
+        // Update host status from server
+        if (this.playerId) {
+          const me = msg.players.find((p) => p.id === this.playerId);
+          if (me) {
+            this.isHost = me.isHost;
+          }
+        }
+        // If we're on the room view, update host controls
+        if (this.roomSection.style.display !== 'none') {
+          const aiControls = document.getElementById('ai-controls') as HTMLElement;
+          if (this.isHost) {
+            this.startBtn.style.display = '';
+            if (aiControls) aiControls.style.display = '';
+          } else {
+            this.startBtn.style.display = 'none';
+            if (aiControls) aiControls.style.display = 'none';
+          }
+        }
+        break;
+      }
 
       case 'game_over':
         this.showGameOver(msg.winnerName);
@@ -300,6 +334,8 @@ export class LobbyUI {
     this.gameoverMessage.textContent = winnerName
       ? `${winnerName} wins!`
       : 'Draw!';
+    // Show Play Again button only for host
+    this.playAgainBtn.style.display = this.isHost ? '' : 'none';
   }
 
   setOnGameStart(cb: () => void): void {

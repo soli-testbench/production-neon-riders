@@ -1,4 +1,4 @@
-import { BikeState, Direction } from './types.js';
+import { BikeState, Direction, PowerUpState } from './types.js';
 
 // Client -> Server messages
 export interface JoinMessage {
@@ -103,6 +103,17 @@ export interface PlayerDisconnectedMessage {
   playerId: string;
 }
 
+export interface PowerUpSpawnMessage {
+  type: 'power_up_spawn';
+  powerUps: PowerUpState[];
+}
+
+export interface PowerUpCollectedMessage {
+  type: 'power_up_collected';
+  powerUpId: string;
+  playerId: string;
+}
+
 export type ServerMessage =
   | RoomCreatedMessage
   | RoomJoinedMessage
@@ -113,4 +124,6 @@ export type ServerMessage =
   | DeathMessage
   | GameOverMessage
   | ErrorMessage
-  | PlayerDisconnectedMessage;
+  | PlayerDisconnectedMessage
+  | PowerUpSpawnMessage
+  | PowerUpCollectedMessage;

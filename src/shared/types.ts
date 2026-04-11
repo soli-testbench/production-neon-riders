@@ -21,6 +21,16 @@ export interface BikeState {
   alive: boolean;
   color: string;
   name: string;
+  speedMultiplier?: number;
+  boostEndTime?: number;
+}
+
+export interface PowerUpState {
+  id: string;
+  x: number;
+  y: number;
+  type: 'speed_boost';
+  active: boolean;
 }
 
 export interface ArenaConfig {
@@ -47,6 +57,14 @@ export const NEON_COLORS = [
 ];
 
 export const BIKE_SPEED = 180;
+
+export const POWER_UP_COLLISION_RADIUS = 15;
+export const SPEED_BOOST_MULTIPLIER = 1.5;
+export const SPEED_BOOST_DURATION_MS = 3000;
+export const POWER_UP_RESPAWN_DELAY_MS = 10000;
+export const POWER_UP_COUNT_MIN = 3;
+export const POWER_UP_COUNT_MAX = 5;
+export const POWER_UP_SPAWN_MARGIN = 100;
 
 /** Maximum trail length in distance units before oldest segments are trimmed */
 export const MAX_TRAIL_LENGTH = 3000;

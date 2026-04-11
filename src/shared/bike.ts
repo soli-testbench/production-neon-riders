@@ -36,7 +36,8 @@ export function turnBike(bike: BikeState, newDirection: Direction): void {
 export function moveBike(bike: BikeState, dt: number): void {
   if (!bike.alive) return;
 
-  const distance = bike.speed * dt;
+  const multiplier = bike.speedMultiplier ?? 1;
+  const distance = bike.speed * multiplier * dt;
   const prevX = bike.x;
   const prevY = bike.y;
 

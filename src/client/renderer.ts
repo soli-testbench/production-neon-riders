@@ -1,5 +1,5 @@
 import { GameCanvas } from './canvas.js';
-import { BikeState, ArenaConfig, Point, sanitizeColor, MAX_TRAIL_LENGTH } from '../shared/types.js';
+import { BikeState, ArenaConfig, Point, PowerUpState, sanitizeColor, MAX_TRAIL_LENGTH } from '../shared/types.js';
 import { getTrailLength } from '../shared/bike.js';
 import type { Particle } from './main.js';
 
@@ -12,6 +12,7 @@ export class Renderer {
   private deathZoom = 1;
   private readonly DEATH_ZOOM_TARGET = 0.5;
   private readonly DEATH_ZOOM_SPEED = 0.02;
+  private powerUpPulse = 0;
 
   constructor(gameCanvas: GameCanvas) {
     this.gameCanvas = gameCanvas;
@@ -414,6 +415,129 @@ export class Renderer {
 
       ctx.restore();
     }
+
+    ctx.restore();
+  }
+
+  drawPowerUps(powerUps: PowerUpState[], _arena: ArenaConfig): void {
+    const ctx = this.ctx;
+    this.powerUpPulse += 0.06;
+
+    ctx.save();
+    this.applyCamera(ctx);
+
+    const camOffX = -this.cameraX;
+    const camOffY = -this.cameraY;
+    const { visLeft, visTop, visRight, visBottom } = this.getVisibleBounds();
+
+    for (const pu of powerUps) {
+      if (!pu.active) continue;
+
+      // Culling
+      if (pu.x < visLeft - 30 || pu.x > visRight + 30 || pu.y < visTop - 30 || pu.y > visBottom + 30) continue;
+
+      const px = camOffX + pu.x;
+      const py = camOffY + pu.y;
+      const pulse = 0.8 + 0.2 * Math.sin(this.powerUpPulse);
+      const radius = 10 * pulse;
+
+      // Outer glow
+      ctx.save();
+      ctx.fillStyle = '#ffff00';
+      ctx.shadowColor = '#ffff00';
+      ctx.shadowBlur = 25 * pulse;
+      ctx.globalAlpha = 0.4 * pulse;
+      ctx.beginPath();
+      ctx.arc(px, py, radius * 1.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Inner bright core
+      ctx.save();
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = '#ffff00';
+      ctx.shadowBlur = 15;
+      ctx.globalAlpha = 0.9;
+      ctx.beginPath();
+      ctx.arc(px, py, radius * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Middle ring
+      ctx.save();
+      ctx.strokeStyle = '#ffff00';
+      ctx.shadowColor = '#ffff00';
+      ctx.shadowBlur = 10;
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.7;
+      ctx.beginPath();
+      ctx.arc(px, py, radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+
+      // Lightning bolt icon
+      ctx.save();
+      ctx.fillStyle = '#ffff00';
+      ctx.shadowColor = '#ffff00';
+      ctx.shadowBlur = 8;
+      ctx.globalAlpha = 0.9;
+      const s = radius * 0.4;
+      ctx.beginPath();
+      ctx.moveTo(px - s * 0.3, py - s);
+      ctx.lineTo(px + s * 0.5, py - s * 0.1);
+      ctx.lineTo(px, py + s * 0.1);
+      ctx.lineTo(px + s * 0.3, py + s);
+      ctx.lineTo(px - s * 0.5, py + s * 0.1);
+      ctx.lineTo(px, py - s * 0.1);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
+
+  drawBoostHUD(boostEndTime: number | null): void {
+    if (!boostEndTime) return;
+
+    const now = Date.now();
+    const remaining = boostEndTime - now;
+    if (remaining <= 0) return;
+
+    const ctx = this.ctx;
+    const w = this.gameCanvas.getWidth();
+
+    const barWidth = 160;
+    const barHeight = 8;
+    const x = (w - barWidth) / 2;
+    const y = 40;
+    const progress = remaining / 3000;
+
+    ctx.save();
+
+    // Label
+    ctx.fillStyle = '#ffff00';
+    ctx.shadowColor = '#ffff00';
+    ctx.shadowBlur = 8;
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('SPEED BOOST', w / 2, y - 4);
+
+    // Bar background
+    ctx.fillStyle = 'rgba(255, 255, 0, 0.15)';
+    ctx.fillRect(x, y, barWidth, barHeight);
+
+    // Bar fill
+    ctx.fillStyle = '#ffff00';
+    ctx.shadowColor = '#ffff00';
+    ctx.shadowBlur = 10;
+    ctx.fillRect(x, y, barWidth * progress, barHeight);
+
+    // Bar border
+    ctx.strokeStyle = 'rgba(255, 255, 0, 0.5)';
+    ctx.lineWidth = 1;
+    ctx.shadowBlur = 0;
+    ctx.strokeRect(x, y, barWidth, barHeight);
 
     ctx.restore();
   }

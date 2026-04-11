@@ -1,5 +1,10 @@
 import { WebSocket } from 'ws';
-import { BikeState, ArenaConfig, DEFAULT_ARENA, Direction, sanitizeColor, NEON_COLORS, Point } from '../shared/types.js';
+import {
+  BikeState, ArenaConfig, DEFAULT_ARENA, Direction, sanitizeColor, NEON_COLORS, Point,
+  PowerUpState, POWER_UP_COLLISION_RADIUS, SPEED_BOOST_MULTIPLIER,
+  SPEED_BOOST_DURATION_MS, POWER_UP_RESPAWN_DELAY_MS,
+  POWER_UP_COUNT_MIN, POWER_UP_COUNT_MAX, POWER_UP_SPAWN_MARGIN,
+} from '../shared/types.js';
 import { createBike, turnBike, moveBike, killBike } from '../shared/bike.js';
 import { checkAllCollisions } from '../shared/collision.js';
 import {
@@ -10,6 +15,8 @@ import {
   StateUpdateMessage,
   DeathMessage,
   GameOverMessage,
+  PowerUpSpawnMessage,
+  PowerUpCollectedMessage,
 } from '../shared/protocol.js';
 
 interface Player {
@@ -43,6 +50,8 @@ export class GameRoom {
   private lastTick: number = 0;
   private readonly TICK_RATE = 30; // ticks per second
   private endGameTimeout: ReturnType<typeof setTimeout> | null = null;
+  private powerUps: Map<string, PowerUpState> = new Map();
+  private powerUpRespawnTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
   constructor(id: string) {
     this.id = id;
@@ -156,8 +165,16 @@ export class GameRoom {
   startGame(requesterId: string): void {
     const player = this.players.get(requesterId);
     if (!player || !player.isHost) return;
-    if (this.state !== 'lobby') return;
+    if (this.state !== 'lobby' && this.state !== 'ended') return;
     if (this.players.size < 1) return;
+
+    // If starting from ended state, clear the endGame timeout
+    if (this.state === 'ended') {
+      if (this.endGameTimeout) {
+        clearTimeout(this.endGameTimeout);
+        this.endGameTimeout = null;
+      }
+    }
 
     this.state = 'countdown';
     let countdown = 3;
@@ -182,6 +199,7 @@ export class GameRoom {
   private beginGame(): void {
     this.state = 'playing';
     this.bikes.clear();
+    this.clearPowerUps();
 
     // Position players in the arena
     const playerArray = Array.from(this.players.values());
@@ -209,6 +227,9 @@ export class GameRoom {
     };
     this.broadcast(startMsg);
 
+    // Spawn power-ups
+    this.spawnInitialPowerUps(Array.from(this.bikes.values()));
+
     // Start tick loop
     this.lastTick = Date.now();
     this.tickInterval = setInterval(() => this.tick(), 1000 / this.TICK_RATE);
@@ -223,6 +244,9 @@ export class GameRoom {
 
     // AI decision-making
     this.updateAiBikes();
+
+    // Check boost expiry
+    this.updateBoosts();
 
     // Move all alive bikes
     for (const bike of this.bikes.values()) {
@@ -247,6 +271,9 @@ export class GameRoom {
         this.broadcast(deathMsg);
       }
     }
+
+    // Check power-up collection
+    this.checkPowerUpCollisions(bikesArray);
 
     // Broadcast state
     const stateMsg: StateUpdateMessage = {
@@ -281,6 +308,8 @@ export class GameRoom {
       clearInterval(this.tickInterval);
       this.tickInterval = null;
     }
+
+    this.clearPowerUps();
 
     const msg: GameOverMessage = {
       type: 'game_over',
@@ -468,6 +497,157 @@ export class GameRoom {
     return this.players.size;
   }
 
+  hasHumanPlayers(): boolean {
+    for (const player of this.players.values()) {
+      if (!player.isBot) return true;
+    }
+    return false;
+  }
+
+  getState(): RoomState {
+    return this.state;
+  }
+
+  getLastActivityTime(): number {
+    return this.lastTick || Date.now();
+  }
+
+  private spawnInitialPowerUps(bikes: BikeState[]): void {
+    const count = POWER_UP_COUNT_MIN + Math.floor(Math.random() * (POWER_UP_COUNT_MAX - POWER_UP_COUNT_MIN + 1));
+    for (let i = 0; i < count; i++) {
+      const id = 'pu-' + Math.random().toString(36).substring(2, 10);
+      const pos = this.getRandomPowerUpPosition(bikes);
+      const powerUp: PowerUpState = {
+        id,
+        x: pos.x,
+        y: pos.y,
+        type: 'speed_boost',
+        active: true,
+      };
+      this.powerUps.set(id, powerUp);
+    }
+    this.broadcastPowerUpState();
+  }
+
+  private getRandomPowerUpPosition(bikes: BikeState[]): Point {
+    const margin = POWER_UP_SPAWN_MARGIN;
+    const gridSize = this.arena.gridSize;
+    const maxAttempts = 50;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const gridX = Math.floor((margin + Math.random() * (this.arena.width - 2 * margin)) / gridSize);
+      const gridY = Math.floor((margin + Math.random() * (this.arena.height - 2 * margin)) / gridSize);
+      const x = gridX * gridSize + gridSize / 2;
+      const y = gridY * gridSize + gridSize / 2;
+
+      // Check not too close to any bike spawn
+      let tooClose = false;
+      for (const bike of bikes) {
+        const dx = x - bike.x;
+        const dy = y - bike.y;
+        if (Math.sqrt(dx * dx + dy * dy) < margin) {
+          tooClose = true;
+          break;
+        }
+      }
+
+      // Check not too close to existing power-ups
+      if (!tooClose) {
+        for (const pu of this.powerUps.values()) {
+          const dx = x - pu.x;
+          const dy = y - pu.y;
+          if (Math.sqrt(dx * dx + dy * dy) < gridSize * 3) {
+            tooClose = true;
+            break;
+          }
+        }
+      }
+
+      if (!tooClose) {
+        return { x, y };
+      }
+    }
+
+    // Fallback: random position within margins
+    const x = margin + Math.random() * (this.arena.width - 2 * margin);
+    const y = margin + Math.random() * (this.arena.height - 2 * margin);
+    return { x, y };
+  }
+
+  private checkPowerUpCollisions(bikes: BikeState[]): void {
+    for (const bike of bikes) {
+      if (!bike.alive) continue;
+
+      for (const powerUp of this.powerUps.values()) {
+        if (!powerUp.active) continue;
+
+        const dx = bike.x - powerUp.x;
+        const dy = bike.y - powerUp.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < POWER_UP_COLLISION_RADIUS) {
+          this.collectPowerUp(powerUp, bike);
+        }
+      }
+    }
+  }
+
+  private collectPowerUp(powerUp: PowerUpState, bike: BikeState): void {
+    powerUp.active = false;
+
+    // Apply speed boost
+    bike.speedMultiplier = SPEED_BOOST_MULTIPLIER;
+    bike.boostEndTime = Date.now() + SPEED_BOOST_DURATION_MS;
+
+    // Broadcast collection
+    const msg: PowerUpCollectedMessage = {
+      type: 'power_up_collected',
+      powerUpId: powerUp.id,
+      playerId: bike.id,
+    };
+    this.broadcast(msg);
+
+    // Schedule respawn
+    const timer = setTimeout(() => {
+      this.powerUpRespawnTimers.delete(powerUp.id);
+      if (this.state !== 'playing') return;
+
+      const bikes = Array.from(this.bikes.values());
+      const newPos = this.getRandomPowerUpPosition(bikes);
+      powerUp.x = newPos.x;
+      powerUp.y = newPos.y;
+      powerUp.active = true;
+      this.broadcastPowerUpState();
+    }, POWER_UP_RESPAWN_DELAY_MS);
+    this.powerUpRespawnTimers.set(powerUp.id, timer);
+  }
+
+  private updateBoosts(): void {
+    const now = Date.now();
+    for (const bike of this.bikes.values()) {
+      if (bike.speedMultiplier && bike.boostEndTime && now >= bike.boostEndTime) {
+        bike.speedMultiplier = undefined;
+        bike.boostEndTime = undefined;
+      }
+    }
+  }
+
+  private clearPowerUps(): void {
+    for (const timer of this.powerUpRespawnTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.powerUpRespawnTimers.clear();
+    this.powerUps.clear();
+  }
+
+  private broadcastPowerUpState(): void {
+    const msg: PowerUpSpawnMessage = {
+      type: 'power_up_spawn',
+      powerUps: Array.from(this.powerUps.values()),
+    };
+    this.broadcast(msg);
+  }
+
   destroy(): void {
     if (this.tickInterval) {
       clearInterval(this.tickInterval);
@@ -479,5 +659,6 @@ export class GameRoom {
       clearTimeout(this.endGameTimeout);
       this.endGameTimeout = null;
     }
+    this.clearPowerUps();
   }
 }

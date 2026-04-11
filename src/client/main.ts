@@ -4,6 +4,8 @@ import { GameLoop } from './gameLoop.js';
 import { InputHandler } from './input.js';
 import { NetworkClient, ConnectionStatus } from './network.js';
 import { LobbyUI } from './ui/lobby.js';
+import { BikeInterpolator } from './interpolation.js';
+import { Minimap } from './minimap.js';
 import { BikeState, ArenaConfig, DEFAULT_ARENA } from '../shared/types.js';
 import {
   ServerMessage,
@@ -27,6 +29,8 @@ class Game {
   private gameActive = false;
   private localPlayerId: string | null = null;
   private particles: Particle[] = [];
+  private interpolator: BikeInterpolator = new BikeInterpolator();
+  private minimap: Minimap = new Minimap();
 
   constructor() {
     this.canvas = new GameCanvas('game-canvas');
@@ -135,11 +139,15 @@ class Game {
         this.bikes = startMsg.bikes;
         this.gameActive = true;
         this.renderer.setPlayerDead(false);
+        this.interpolator.clear();
+        this.interpolator.pushServerState(this.bikes, performance.now());
+        this.minimap.show();
         break;
       }
       case 'state_update': {
         const stateMsg = msg as StateUpdateMessage;
         this.bikes = stateMsg.bikes;
+        this.interpolator.pushServerState(this.bikes, performance.now());
         // Check if local player died
         if (this.localPlayerId) {
           const localBike = this.bikes.find((b) => b.id === this.localPlayerId);
@@ -160,6 +168,8 @@ class Game {
       case 'game_over':
         this.gameActive = false;
         this.renderer.setPlayerDead(false);
+        this.interpolator.clear();
+        this.minimap.hide();
         break;
     }
   }
@@ -201,9 +211,11 @@ class Game {
     this.renderer.clear();
 
     if (this.gameActive) {
-      this.renderer.drawGrid(this.arena, this.bikes);
-      this.renderer.drawBikes(this.bikes);
+      const renderBikes = this.interpolator.getInterpolatedBikes(this.bikes);
+      this.renderer.drawGrid(this.arena, renderBikes);
+      this.renderer.drawBikes(renderBikes);
       this.renderer.drawParticles(this.particles);
+      this.minimap.render(this.arena, renderBikes, this.localPlayerId);
     } else {
       // Draw background animation when not in game
       this.renderer.drawBackgroundGrid();

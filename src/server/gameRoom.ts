@@ -15,6 +15,7 @@ import {
   StateUpdateMessage,
   DeathMessage,
   GameOverMessage,
+  PlayerResult,
   PowerUpSpawnMessage,
   PowerUpCollectedMessage,
 } from '../shared/protocol.js';
@@ -52,6 +53,8 @@ export class GameRoom {
   private endGameTimeout: ReturnType<typeof setTimeout> | null = null;
   private powerUps: Map<string, PowerUpState> = new Map();
   private powerUpRespawnTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+  private gameStartTime: number = 0;
+  private deathOrder: { playerId: string; timestamp: number }[] = [];
 
   constructor(id: string) {
     this.id = id;
@@ -63,7 +66,17 @@ export class GameRoom {
 
     const isHost = this.players.size === 0;
     const safeName = name.slice(0, 16).replace(/[<>&"'/]/g, '');
-    const safeColor = sanitizeColor(color);
+    let safeColor = sanitizeColor(color);
+
+    // Ensure unique color: if requested color is taken, assign first unused color
+    const usedColors = new Set(Array.from(this.players.values()).map((p) => p.color));
+    if (usedColors.has(safeColor)) {
+      const unused = NEON_COLORS.find((c) => !usedColors.has(c));
+      if (unused) {
+        safeColor = unused;
+      }
+    }
+
     this.players.set(id, { id, name: safeName, color: safeColor, ws, isHost, isBot: false });
 
     this.broadcastPlayerList();
@@ -200,6 +213,8 @@ export class GameRoom {
     this.state = 'playing';
     this.bikes.clear();
     this.clearPowerUps();
+    this.gameStartTime = Date.now();
+    this.deathOrder = [];
 
     // Position players in the arena
     const playerArray = Array.from(this.players.values());
@@ -263,6 +278,7 @@ export class GameRoom {
       const bike = this.bikes.get(death.bikeId);
       if (bike && bike.alive) {
         killBike(bike);
+        this.deathOrder.push({ playerId: death.bikeId, timestamp: Date.now() });
         const deathMsg: DeathMessage = {
           type: 'death',
           playerId: death.bikeId,
@@ -301,6 +317,60 @@ export class GameRoom {
     }
   }
 
+  private buildResults(winner: BikeState | null): PlayerResult[] {
+    const now = Date.now();
+    const results: PlayerResult[] = [];
+
+    // Build a map of playerId -> death timestamp
+    const deathTimes = new Map<string, number>();
+    for (const d of this.deathOrder) {
+      if (!deathTimes.has(d.playerId)) {
+        deathTimes.set(d.playerId, d.timestamp);
+      }
+    }
+
+    // All bikes in the game
+    for (const bike of this.bikes.values()) {
+      const player = this.players.get(bike.id);
+      const deathTime = deathTimes.get(bike.id);
+      const survivalTime = deathTime
+        ? deathTime - this.gameStartTime
+        : now - this.gameStartTime;
+
+      results.push({
+        playerId: bike.id,
+        name: player?.name || bike.name,
+        color: bike.color,
+        placement: 0, // computed below
+        survivalTime,
+      });
+    }
+
+    // Sort by survival time descending (longest survival = best placement)
+    results.sort((a, b) => b.survivalTime - a.survivalTime);
+
+    // Assign placements - ties for simultaneous deaths
+    let placement = 1;
+    for (let i = 0; i < results.length; i++) {
+      if (i > 0 && results[i].survivalTime === results[i - 1].survivalTime) {
+        results[i].placement = results[i - 1].placement; // tied
+      } else {
+        results[i].placement = placement;
+      }
+      placement++;
+    }
+
+    // If there's a winner, ensure they are placement 1
+    if (winner) {
+      const winnerResult = results.find((r) => r.playerId === winner.id);
+      if (winnerResult) {
+        winnerResult.placement = 1;
+      }
+    }
+
+    return results;
+  }
+
   private endGame(winner: BikeState | null): void {
     this.state = 'ended';
 
@@ -311,10 +381,13 @@ export class GameRoom {
 
     this.clearPowerUps();
 
+    const results = this.buildResults(winner);
+
     const msg: GameOverMessage = {
       type: 'game_over',
       winnerId: winner?.id || null,
       winnerName: winner?.name || '',
+      results,
     };
     this.broadcast(msg);
 

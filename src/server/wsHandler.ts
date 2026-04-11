@@ -114,6 +114,24 @@ export class WebSocketHandler {
         break;
       }
 
+      case 'add_ai': {
+        const roomId = this.playerRooms.get(playerId);
+        if (roomId) {
+          const room = this.rooms.get(roomId);
+          room?.addAi(playerId);
+        }
+        break;
+      }
+
+      case 'remove_ai': {
+        const roomId = this.playerRooms.get(playerId);
+        if (roomId) {
+          const room = this.rooms.get(roomId);
+          room?.removeAi(playerId);
+        }
+        break;
+      }
+
       case 'leave_room': {
         this.leaveRoom(playerId);
         break;

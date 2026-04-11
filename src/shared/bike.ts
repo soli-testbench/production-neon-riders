@@ -1,4 +1,4 @@
-import { BikeState, Direction, Point, BIKE_SPEED } from './types.js';
+import { BikeState, Direction, Point, BIKE_SPEED, MAX_TRAIL_LENGTH } from './types.js';
 
 export function createBike(
   id: string,
@@ -64,6 +64,45 @@ export function moveBike(bike: BikeState, dt: number): void {
     if (dx > 0 && dy > 0) {
       bike.trail.push({ x: prevX, y: prevY });
     }
+  }
+
+  // Trim trail if it exceeds MAX_TRAIL_LENGTH
+  trimTrail(bike);
+}
+
+export function getTrailLength(trail: Point[]): number {
+  let length = 0;
+  for (let i = 1; i < trail.length; i++) {
+    const dx = trail[i].x - trail[i - 1].x;
+    const dy = trail[i].y - trail[i - 1].y;
+    length += Math.sqrt(dx * dx + dy * dy);
+  }
+  return length;
+}
+
+export function trimTrail(bike: BikeState): void {
+  if (bike.trail.length < 2) return;
+
+  // Calculate total trail length including live segment to current position
+  let totalLength = 0;
+  for (let i = 1; i < bike.trail.length; i++) {
+    const dx = bike.trail[i].x - bike.trail[i - 1].x;
+    const dy = bike.trail[i].y - bike.trail[i - 1].y;
+    totalLength += Math.sqrt(dx * dx + dy * dy);
+  }
+  // Add live segment
+  const lastPt = bike.trail[bike.trail.length - 1];
+  const liveDx = bike.x - lastPt.x;
+  const liveDy = bike.y - lastPt.y;
+  totalLength += Math.sqrt(liveDx * liveDx + liveDy * liveDy);
+
+  // Remove oldest points until under max length
+  while (totalLength > MAX_TRAIL_LENGTH && bike.trail.length > 2) {
+    const dx = bike.trail[1].x - bike.trail[0].x;
+    const dy = bike.trail[1].y - bike.trail[0].y;
+    const segLen = Math.sqrt(dx * dx + dy * dy);
+    bike.trail.shift();
+    totalLength -= segLen;
   }
 }
 

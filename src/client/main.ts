@@ -5,7 +5,13 @@ import { InputHandler } from './input.js';
 import { NetworkClient } from './network.js';
 import { LobbyUI } from './ui/lobby.js';
 import { BikeState, ArenaConfig, DEFAULT_ARENA } from '../shared/types.js';
-import { ServerMessage, GameStartMessage, StateUpdateMessage } from '../shared/protocol.js';
+import {
+  ServerMessage,
+  GameStartMessage,
+  StateUpdateMessage,
+  RoomCreatedMessage,
+  RoomJoinedMessage,
+} from '../shared/protocol.js';
 
 class Game {
   private canvas: GameCanvas;
@@ -18,6 +24,7 @@ class Game {
   private bikes: BikeState[] = [];
   private arena: ArenaConfig = { ...DEFAULT_ARENA };
   private gameActive = false;
+  private localPlayerId: string | null = null;
 
   constructor() {
     this.canvas = new GameCanvas('game-canvas');
@@ -62,20 +69,41 @@ class Game {
 
   private handleGameMessage(msg: ServerMessage): void {
     switch (msg.type) {
+      case 'room_created': {
+        const roomMsg = msg as RoomCreatedMessage;
+        this.localPlayerId = roomMsg.playerId;
+        this.renderer.setLocalPlayerId(roomMsg.playerId);
+        break;
+      }
+      case 'room_joined': {
+        const joinMsg = msg as RoomJoinedMessage;
+        this.localPlayerId = joinMsg.playerId;
+        this.renderer.setLocalPlayerId(joinMsg.playerId);
+        break;
+      }
       case 'game_start': {
         const startMsg = msg as GameStartMessage;
         this.arena = startMsg.arena;
         this.bikes = startMsg.bikes;
         this.gameActive = true;
+        this.renderer.setPlayerDead(false);
         break;
       }
       case 'state_update': {
         const stateMsg = msg as StateUpdateMessage;
         this.bikes = stateMsg.bikes;
+        // Check if local player died
+        if (this.localPlayerId) {
+          const localBike = this.bikes.find((b) => b.id === this.localPlayerId);
+          if (localBike && !localBike.alive) {
+            this.renderer.setPlayerDead(true);
+          }
+        }
         break;
       }
       case 'game_over':
         this.gameActive = false;
+        this.renderer.setPlayerDead(false);
         break;
     }
   }
@@ -88,7 +116,7 @@ class Game {
     this.renderer.clear();
 
     if (this.gameActive) {
-      this.renderer.drawGrid(this.arena);
+      this.renderer.drawGrid(this.arena, this.bikes);
       this.renderer.drawBikes(this.bikes);
     } else {
       // Draw background animation when not in game

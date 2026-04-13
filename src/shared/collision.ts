@@ -25,9 +25,12 @@ export function checkWallCollision(bike: BikeState, arena: ArenaConfig): boolean
 
 export function checkTrailCollision(
   bike: BikeState,
-  trails: { trail: Point[]; id: string; alive: boolean; x: number; y: number }[],
+  trails: { trail: Point[]; id: string; alive: boolean; x: number; y: number; jumping?: boolean }[],
   collisionRadius: number = 3,
 ): string | null {
+  // Jumping bikes ignore trail collisions
+  if (bike.jumping) return null;
+
   const head: Point = { x: bike.x, y: bike.y };
 
   for (const other of trails) {

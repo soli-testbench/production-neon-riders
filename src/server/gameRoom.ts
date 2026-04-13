@@ -4,6 +4,8 @@ import {
   PowerUpState, POWER_UP_COLLISION_RADIUS, SPEED_BOOST_MULTIPLIER,
   SPEED_BOOST_DURATION_MS, POWER_UP_RESPAWN_DELAY_MS,
   POWER_UP_COUNT_MIN, POWER_UP_COUNT_MAX, POWER_UP_SPAWN_MARGIN,
+  RampState, RAMP_COUNT_MIN, RAMP_COUNT_MAX, RAMP_WIDTH, RAMP_HEIGHT,
+  RAMP_SPAWN_MARGIN, JUMP_DURATION_MS,
 } from '../shared/types.js';
 import { createBike, turnBike, moveBike, killBike } from '../shared/bike.js';
 import { checkAllCollisions } from '../shared/collision.js';
@@ -55,6 +57,7 @@ export class GameRoom {
   private powerUpRespawnTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private gameStartTime: number = 0;
   private deathOrder: { playerId: string; timestamp: number }[] = [];
+  private ramps: RampState[] = [];
 
   constructor(id: string) {
     this.id = id;
@@ -161,6 +164,21 @@ export class GameRoom {
     this.broadcast({ type: 'player_disconnected', playerId: id });
     this.broadcastPlayerList();
 
+    // Handle countdown state: cancel if no human players remain
+    if (this.state === 'countdown') {
+      const hasHumans = this.hasHumanPlayers();
+      if (!hasHumans || this.players.size === 0) {
+        // Cancel countdown - only bots remain or room is empty
+        if (this.countdownTimer) {
+          clearInterval(this.countdownTimer);
+          this.countdownTimer = null;
+        }
+        this.state = 'lobby';
+        this.broadcastPlayerList();
+        return;
+      }
+    }
+
     // Check game over
     if (this.state === 'playing') {
       this.checkGameOver();
@@ -210,9 +228,16 @@ export class GameRoom {
   }
 
   private beginGame(): void {
+    // Guard: don't start with zero players
+    if (this.players.size === 0) {
+      this.state = 'lobby';
+      return;
+    }
+
     this.state = 'playing';
     this.bikes.clear();
     this.clearPowerUps();
+    this.ramps = [];
     this.gameStartTime = Date.now();
     this.deathOrder = [];
 
@@ -233,12 +258,16 @@ export class GameRoom {
       this.bikes.set(player.id, bike);
     });
 
+    // Spawn ramps
+    this.spawnRamps();
+
     const bikesArray = Array.from(this.bikes.values());
 
     const startMsg: GameStartMessage = {
       type: 'game_start',
       arena: this.arena,
       bikes: bikesArray,
+      ramps: this.ramps,
     };
     this.broadcast(startMsg);
 
@@ -263,12 +292,18 @@ export class GameRoom {
     // Check boost expiry
     this.updateBoosts();
 
+    // Check jump expiry
+    this.updateJumps();
+
     // Move all alive bikes
     for (const bike of this.bikes.values()) {
       if (bike.alive) {
         moveBike(bike, dt);
       }
     }
+
+    // Check ramp collisions (must happen after movement)
+    this.checkRampCollisions();
 
     // Check collisions
     const bikesArray = Array.from(this.bikes.values());
@@ -481,6 +516,17 @@ export class GameRoom {
           if (dist < AI_TRAIL_AVOID_DIST) {
             score -= (AI_TRAIL_AVOID_DIST - dist) * 3;
           }
+        }
+      }
+
+      // Ramp awareness: seek ramps when trail danger is high
+      for (const ramp of this.ramps) {
+        const dx = ramp.x - shortLook.x;
+        const dy = ramp.y - shortLook.y;
+        const distToRamp = Math.sqrt(dx * dx + dy * dy);
+        if (distToRamp < AI_WALL_AVOID_DIST) {
+          // Bonus for heading toward a ramp (especially if there's danger)
+          score += Math.max(0, (AI_WALL_AVOID_DIST - distToRamp) * 0.5);
         }
       }
 
@@ -721,17 +767,116 @@ export class GameRoom {
     this.broadcast(msg);
   }
 
+  private spawnRamps(): void {
+    const count = RAMP_COUNT_MIN + Math.floor(Math.random() * (RAMP_COUNT_MAX - RAMP_COUNT_MIN + 1));
+    const directions: Direction[] = ['up', 'down', 'left', 'right'];
+
+    for (let i = 0; i < count; i++) {
+      const id = 'ramp-' + Math.random().toString(36).substring(2, 10);
+      const pos = this.getRandomRampPosition();
+      const direction = directions[Math.floor(Math.random() * directions.length)];
+      this.ramps.push({
+        id,
+        x: pos.x,
+        y: pos.y,
+        direction,
+        width: RAMP_WIDTH,
+        height: RAMP_HEIGHT,
+      });
+    }
+  }
+
+  private getRandomRampPosition(): Point {
+    const margin = RAMP_SPAWN_MARGIN;
+    const maxAttempts = 50;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const x = margin + Math.random() * (this.arena.width - 2 * margin);
+      const y = margin + Math.random() * (this.arena.height - 2 * margin);
+
+      // Check not too close to bike spawns
+      let tooClose = false;
+      for (const bike of this.bikes.values()) {
+        const dx = x - bike.x;
+        const dy = y - bike.y;
+        if (Math.sqrt(dx * dx + dy * dy) < margin) {
+          tooClose = true;
+          break;
+        }
+      }
+
+      // Check not too close to other ramps
+      if (!tooClose) {
+        for (const ramp of this.ramps) {
+          const dx = x - ramp.x;
+          const dy = y - ramp.y;
+          if (Math.sqrt(dx * dx + dy * dy) < RAMP_WIDTH * 3) {
+            tooClose = true;
+            break;
+          }
+        }
+      }
+
+      if (!tooClose) {
+        return { x, y };
+      }
+    }
+
+    // Fallback
+    return {
+      x: margin + Math.random() * (this.arena.width - 2 * margin),
+      y: margin + Math.random() * (this.arena.height - 2 * margin),
+    };
+  }
+
+  private checkRampCollisions(): void {
+    const now = Date.now();
+    for (const bike of this.bikes.values()) {
+      if (!bike.alive || bike.jumping) continue;
+
+      for (const ramp of this.ramps) {
+        const halfW = ramp.width / 2;
+        const halfH = ramp.height / 2;
+        if (
+          bike.x >= ramp.x - halfW &&
+          bike.x <= ramp.x + halfW &&
+          bike.y >= ramp.y - halfH &&
+          bike.y <= ramp.y + halfH
+        ) {
+          bike.jumping = true;
+          bike.jumpEndTime = now + JUMP_DURATION_MS;
+          break;
+        }
+      }
+    }
+  }
+
+  private updateJumps(): void {
+    const now = Date.now();
+    for (const bike of this.bikes.values()) {
+      if (bike.jumping && bike.jumpEndTime && now >= bike.jumpEndTime) {
+        bike.jumping = false;
+        bike.jumpEndTime = undefined;
+        // Insert current position as a new trail point so the trail resumes cleanly
+        bike.trail.push({ x: bike.x, y: bike.y });
+      }
+    }
+  }
+
   destroy(): void {
     if (this.tickInterval) {
       clearInterval(this.tickInterval);
+      this.tickInterval = null;
     }
     if (this.countdownTimer) {
       clearInterval(this.countdownTimer);
+      this.countdownTimer = null;
     }
     if (this.endGameTimeout) {
       clearTimeout(this.endGameTimeout);
       this.endGameTimeout = null;
     }
     this.clearPowerUps();
+    this.ramps = [];
   }
 }

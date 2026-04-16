@@ -35,6 +35,12 @@ export interface RemoveAiMessage {
   type: 'remove_ai';
 }
 
+export interface QuickPlayMessage {
+  type: 'quick_play';
+  name: string;
+  color: string;
+}
+
 export type ClientMessage =
   | JoinMessage
   | CreateRoomMessage
@@ -42,7 +48,8 @@ export type ClientMessage =
   | StartGameMessage
   | LeaveRoomMessage
   | AddAiMessage
-  | RemoveAiMessage;
+  | RemoveAiMessage
+  | QuickPlayMessage;
 
 // Server -> Client messages
 export interface RoomCreatedMessage {

@@ -3,7 +3,8 @@ import fs from 'fs';
 import path from 'path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { WebSocketHandler } from './wsHandler.js';
-import { initDatabase, getLeaderboard } from './db/index.js';
+import { initDatabase, getLeaderboard, getPlayerStats } from './db/index.js';
+import { sanitizeName } from '../shared/types.js';
 
 const PORT = parseInt(process.env.PORT || '8080', 10);
 const STATIC_DIR = path.resolve(process.cwd(), 'dist/client');
@@ -81,6 +82,34 @@ async function handleLeaderboard(res: http.ServerResponse): Promise<void> {
   }
 }
 
+// Player stats endpoint
+async function handlePlayerStats(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  try {
+    const url = new URL(req.url || '', `http://${req.headers.host}`);
+    const rawName = url.searchParams.get('name') || '';
+    const name = sanitizeName(rawName);
+
+    if (!name) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Missing name parameter' }));
+      return;
+    }
+
+    const stats = await getPlayerStats(name);
+    if (!stats) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ found: false }));
+      return;
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ found: true, ...stats }));
+  } catch {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Failed to fetch stats' }));
+  }
+}
+
 // Create HTTP server
 const server = http.createServer((req, res) => {
   if (req.url === '/health') {
@@ -89,6 +118,10 @@ const server = http.createServer((req, res) => {
   }
   if (req.url === '/api/leaderboard' && req.method === 'GET') {
     handleLeaderboard(res);
+    return;
+  }
+  if (req.url?.startsWith('/api/stats') && req.method === 'GET') {
+    handlePlayerStats(req, res);
     return;
   }
   serveStatic(req, res);

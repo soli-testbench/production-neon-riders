@@ -12,6 +12,7 @@ export class InputHandler {
   private touchStartHandler: (e: TouchEvent) => void;
   private touchMoveHandler: (e: TouchEvent) => void;
   private touchEndHandler: (e: TouchEvent) => void;
+  private enabled = false;
 
   constructor() {
     this.keyHandler = this.handleKeyDown.bind(this);
@@ -28,6 +29,14 @@ export class InputHandler {
 
   onDirection(cb: DirectionCallback): void {
     this.callback = cb;
+  }
+
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+  }
+
+  isEnabled(): boolean {
+    return this.enabled;
   }
 
   private handleKeyDown(e: KeyboardEvent): void {
@@ -71,15 +80,23 @@ export class InputHandler {
       const touch = e.touches[0];
       this.touchStartX = touch.clientX;
       this.touchStartY = touch.clientY;
-      e.preventDefault();
+      // Only prevent default scrolling/gestures during active gameplay.
+      // In the lobby/game-over screens we must let touches pass through
+      // so users can scroll, tap inputs, and select text normally.
+      if (this.enabled) {
+        e.preventDefault();
+      }
     }
   }
 
   private handleTouchMove(e: TouchEvent): void {
-    e.preventDefault();
+    if (this.enabled) {
+      e.preventDefault();
+    }
   }
 
   private handleTouchEnd(e: TouchEvent): void {
+    if (!this.enabled) return;
     if (e.changedTouches.length > 0) {
       const touch = e.changedTouches[0];
       const dx = touch.clientX - this.touchStartX;

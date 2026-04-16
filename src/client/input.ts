@@ -31,6 +31,10 @@ export class InputHandler {
   }
 
   private handleKeyDown(e: KeyboardEvent): void {
+    // Don't capture WASD keys when an input/textarea has focus
+    const tag = (e.target as HTMLElement)?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
     let direction: Direction | null = null;
 
     switch (e.key) {

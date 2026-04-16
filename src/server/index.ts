@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { WebSocketHandler } from './wsHandler.js';
+import { initDatabase, getLeaderboard } from './db/index.js';
 
 const PORT = parseInt(process.env.PORT || '8080', 10);
 const STATIC_DIR = path.resolve(process.cwd(), 'dist/client');
@@ -68,10 +69,26 @@ function handleHealthCheck(res: http.ServerResponse): void {
   res.end(JSON.stringify({ status: 'ok', timestamp: Date.now() }));
 }
 
+// Leaderboard endpoint
+async function handleLeaderboard(res: http.ServerResponse): Promise<void> {
+  try {
+    const entries = await getLeaderboard();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(entries));
+  } catch {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Failed to fetch leaderboard' }));
+  }
+}
+
 // Create HTTP server
 const server = http.createServer((req, res) => {
   if (req.url === '/health') {
     handleHealthCheck(res);
+    return;
+  }
+  if (req.url === '/api/leaderboard' && req.method === 'GET') {
+    handleLeaderboard(res);
     return;
   }
   serveStatic(req, res);
@@ -86,9 +103,22 @@ wss.on('connection', (ws: WebSocket) => {
   wsHandler.handleConnection(ws);
 });
 
-// Start server
-server.listen(PORT, () => {
-  console.log(`Neon Riders server running on port ${PORT}`);
-  console.log(`WebSocket endpoint: ws://localhost:${PORT}/ws`);
-  console.log(`Rooms: ${wsHandler.getRoomCount()} | Players: ${wsHandler.getPlayerCount()}`);
-});
+// Initialize database and start server
+initDatabase()
+  .then((connected) => {
+    if (connected) {
+      console.log('Database persistence enabled');
+    } else {
+      console.log('Running without database persistence');
+    }
+  })
+  .catch((err) => {
+    console.error('Database init error (non-fatal):', err);
+  })
+  .finally(() => {
+    server.listen(PORT, () => {
+      console.log(`Neon Riders server running on port ${PORT}`);
+      console.log(`WebSocket endpoint: ws://localhost:${PORT}/ws`);
+      console.log(`Rooms: ${wsHandler.getRoomCount()} | Players: ${wsHandler.getPlayerCount()}`);
+    });
+  });

@@ -35,6 +35,9 @@ export class LobbyUI {
   private cachedHudState: Map<string, { name: string; color: string; alive: boolean; element: HTMLElement }> = new Map();
   private cachedHudOrder: string[] = [];
 
+  private copyBtn: HTMLButtonElement | null = null;
+  private shareBtn: HTMLButtonElement | null = null;
+
   constructor(network: NetworkClient) {
     this.network = network;
     // Load saved color or default to first
@@ -62,9 +65,125 @@ export class LobbyUI {
     this.hud = document.getElementById('hud')!;
     this.hudPlayers = document.getElementById('hud-players')!;
 
+    this.copyBtn = document.getElementById('btn-copy-room-code') as HTMLButtonElement | null;
+    this.shareBtn = document.getElementById('btn-share-room') as HTMLButtonElement | null;
+
     this.initColorPicker();
     this.loadSavedName();
     this.bindEvents();
+    this.initRoomSharing();
+    this.prefillRoomCodeFromUrl();
+  }
+
+  private prefillRoomCodeFromUrl(): void {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const roomFromUrl = params.get('room');
+      if (roomFromUrl) {
+        const normalized = roomFromUrl.trim().toUpperCase().slice(0, 5);
+        if (normalized) {
+          this.roomCodeInput.value = normalized;
+        }
+      }
+    } catch {
+      // Ignore URL parsing errors
+    }
+  }
+
+  private buildJoinUrl(roomId: string): string {
+    const origin = window.location.origin;
+    const path = window.location.pathname;
+    return `${origin}${path}?room=${encodeURIComponent(roomId)}`;
+  }
+
+  private async copyToClipboard(text: string): Promise<boolean> {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch {
+      // Fall through to legacy path
+    }
+
+    // Legacy fallback using a hidden textarea + document.execCommand('copy')
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '-1000px';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+
+  private flashCopyConfirmation(btn: HTMLButtonElement, success: boolean): void {
+    const original = btn.dataset.originalLabel || btn.textContent || 'COPY';
+    if (!btn.dataset.originalLabel) {
+      btn.dataset.originalLabel = original;
+    }
+    btn.classList.remove('copied', 'copy-failed');
+    // Trigger reflow so the animation restarts on rapid clicks
+    void btn.offsetHeight;
+    if (success) {
+      btn.textContent = 'COPIED!';
+      btn.classList.add('copied');
+    } else {
+      btn.textContent = 'FAILED';
+      btn.classList.add('copy-failed');
+    }
+    window.setTimeout(() => {
+      btn.textContent = btn.dataset.originalLabel || 'COPY';
+      btn.classList.remove('copied', 'copy-failed');
+    }, 1500);
+  }
+
+  private initRoomSharing(): void {
+    if (this.copyBtn) {
+      this.copyBtn.addEventListener('click', async () => {
+        const code = this.currentRoomId || this.roomCodeDisplay.textContent || '';
+        if (!code) return;
+        const ok = await this.copyToClipboard(code);
+        this.flashCopyConfirmation(this.copyBtn!, ok);
+      });
+    }
+
+    if (this.shareBtn) {
+      // Only expose the share button on devices that support Web Share API
+      if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+        this.shareBtn.style.display = '';
+      } else {
+        this.shareBtn.style.display = 'none';
+      }
+
+      this.shareBtn.addEventListener('click', async () => {
+        const code = this.currentRoomId || this.roomCodeDisplay.textContent || '';
+        if (!code) return;
+        const url = this.buildJoinUrl(code);
+        const shareData = {
+          title: 'Neon Riders',
+          text: `Join my Neon Riders room: ${code}`,
+          url,
+        };
+        try {
+          if (navigator.share) {
+            await navigator.share(shareData);
+            return;
+          }
+        } catch {
+          // User cancelled or share failed — fall back to copying the URL
+        }
+        const ok = await this.copyToClipboard(url);
+        this.flashCopyConfirmation(this.shareBtn!, ok);
+      });
+    }
   }
 
   private initColorPicker(): void {

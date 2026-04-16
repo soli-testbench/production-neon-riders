@@ -30,6 +30,19 @@ export function turnBike(bike: BikeState, newDirection: Direction): void {
     right: 'left',
   };
   if (opposites[bike.direction] === newDirection) return;
+  if (bike.direction === newDirection) return;
+
+  // Record the corner position as a trail waypoint BEFORE changing direction.
+  // This ensures sharp 90-degree corners and pixel-perfect collision detection
+  // at turns. The moveBike() dx/dy check remains as a fallback safety net.
+  // Skip when jumping — jumping bikes intentionally do not lay trail.
+  if (!bike.jumping) {
+    const last = bike.trail[bike.trail.length - 1];
+    if (!last || last.x !== bike.x || last.y !== bike.y) {
+      bike.trail.push({ x: bike.x, y: bike.y });
+    }
+  }
+
   bike.direction = newDirection;
 }
 

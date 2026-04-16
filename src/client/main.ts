@@ -43,6 +43,15 @@ class Game {
   private isLocalPlayerDead = false;
   private spectatorLabel: HTMLElement | null = null;
 
+  // Death overlay state
+  private deathOverlayEl: HTMLElement | null = null;
+  private deathOverlayHideTimer: number | null = null;
+  private pendingSpectatorTimer: number | null = null;
+  private lastDeathReason: string | null = null;
+  private localDeathPlacement: number | null = null;
+  private totalPlayersAtDeath: number | null = null;
+  private static readonly DEATH_OVERLAY_DURATION_MS = 1800;
+
   constructor() {
     this.canvas = new GameCanvas('game-canvas');
     this.renderer = new Renderer(this.canvas);
@@ -167,10 +176,16 @@ class Game {
           this.renderer.setFollowTarget(this.localPlayerId);
         }
         this.hideSpectatorLabel();
+        this.hideDeathOverlayImmediate();
+        this.lastDeathReason = null;
+        this.localDeathPlacement = null;
+        this.totalPlayersAtDeath = null;
         this.interpolator.clear();
         this.interpolator.pushServerState(this.bikes, performance.now());
         this.minimap.show();
         this.killFeed.show();
+        // Enable touch input (calls preventDefault) only during active gameplay.
+        this.input.setEnabled(true);
         break;
       }
       case 'state_update': {
@@ -183,8 +198,16 @@ class Game {
           if (localBike && !localBike.alive && !this.isLocalPlayerDead) {
             this.isLocalPlayerDead = true;
             this.renderer.setPlayerDead(true);
-            // Auto-start spectating the first alive player
-            this.autoSelectSpectatorTarget();
+            // Touch input should no longer block the page — the local player is
+            // now spectating (handled via this.gameActive/dead flag in main.ts)
+            // but we keep input listeners enabled for swipe-based spectator cycling.
+            // Compute placement at time of death: remaining alive players finish
+            // ahead of us, so our placement is (alive remaining) + 1.
+            const aliveCount = this.bikes.filter((b) => b.alive).length;
+            this.totalPlayersAtDeath = this.bikes.length;
+            this.localDeathPlacement = aliveCount + 1;
+            // Show the death overlay, then smoothly fade into spectator mode.
+            this.showDeathOverlay();
           }
         }
         // If spectating and the spectated player died, auto-switch
@@ -203,6 +226,15 @@ class Game {
           this.spawnDeathParticles(deadBike.x, deadBike.y, deadBike.color);
           this.killFeed.addEntry(deadBike.name, deadBike.color, deathMsg.reason);
         }
+        // Capture reason for the local player's death overlay. The death
+        // message may arrive before or after the state_update that flips the
+        // local player's alive flag, so handle both orderings.
+        if (deathMsg.playerId === this.localPlayerId) {
+          this.lastDeathReason = deathMsg.reason;
+          if (this.isLocalPlayerDead && this.deathOverlayEl) {
+            this.updateDeathOverlayReason();
+          }
+        }
         break;
       }
       case 'game_over': {
@@ -212,12 +244,15 @@ class Game {
         this.spectatorTargetId = null;
         this.renderer.setPlayerDead(false);
         this.hideSpectatorLabel();
+        this.hideDeathOverlayImmediate();
         this.interpolator.clear();
         this.minimap.hide();
         this.killFeed.hide();
         this.powerUps = [];
         this.ramps = [];
         this.localBoostEndTime = null;
+        // Disable touch input preventDefault so lobby UI is usable again.
+        this.input.setEnabled(false);
         this.lobby.showGameOverWithResults(gameOverMsg.winnerName, gameOverMsg.results || []);
         break;
       }
@@ -303,6 +338,119 @@ class Game {
     }
     if (this.spectatorLabel) {
       this.spectatorLabel.style.display = 'none';
+    }
+  }
+
+  // ----- Death overlay -----
+
+  private ensureDeathOverlay(): HTMLElement {
+    if (this.deathOverlayEl) return this.deathOverlayEl;
+    const el = document.createElement('div');
+    el.id = 'death-overlay';
+    el.className = 'death-overlay';
+    el.innerHTML = `
+      <div class="death-flash"></div>
+      <div class="death-overlay-content">
+        <h2 class="death-title">CRASHED</h2>
+        <p class="death-reason"></p>
+        <p class="death-placement"></p>
+      </div>
+    `;
+    document.body.appendChild(el);
+    this.deathOverlayEl = el;
+    return el;
+  }
+
+  private formatPlacement(n: number): string {
+    // 1 -> 1st, 2 -> 2nd, 3 -> 3rd, else -> Nth
+    const mod100 = n % 100;
+    if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+    switch (n % 10) {
+      case 1:
+        return `${n}st`;
+      case 2:
+        return `${n}nd`;
+      case 3:
+        return `${n}rd`;
+      default:
+        return `${n}th`;
+    }
+  }
+
+  private updateDeathOverlayReason(): void {
+    if (!this.deathOverlayEl) return;
+    const reasonEl = this.deathOverlayEl.querySelector('.death-reason') as HTMLElement | null;
+    if (reasonEl) {
+      reasonEl.textContent = this.lastDeathReason || '';
+    }
+  }
+
+  private showDeathOverlay(): void {
+    const el = this.ensureDeathOverlay();
+
+    // Clear any lingering timers from a previous death overlay.
+    if (this.deathOverlayHideTimer !== null) {
+      window.clearTimeout(this.deathOverlayHideTimer);
+      this.deathOverlayHideTimer = null;
+    }
+    if (this.pendingSpectatorTimer !== null) {
+      window.clearTimeout(this.pendingSpectatorTimer);
+      this.pendingSpectatorTimer = null;
+    }
+
+    const reasonEl = el.querySelector('.death-reason') as HTMLElement | null;
+    const placementEl = el.querySelector('.death-placement') as HTMLElement | null;
+    if (reasonEl) {
+      reasonEl.textContent = this.lastDeathReason || '';
+    }
+    if (placementEl) {
+      if (this.localDeathPlacement !== null && this.totalPlayersAtDeath !== null) {
+        placementEl.textContent = `${this.formatPlacement(this.localDeathPlacement)} of ${this.totalPlayersAtDeath}`;
+      } else {
+        placementEl.textContent = '';
+      }
+    }
+
+    // Reset classes so the flash/fade animations re-trigger.
+    el.classList.remove('fade-out');
+    // Force reflow to restart CSS animations.
+    void el.offsetHeight;
+    el.classList.add('visible');
+
+    // After the configured duration, start the spectator transition AND
+    // begin fading out the overlay in parallel so they cross-fade smoothly.
+    this.pendingSpectatorTimer = window.setTimeout(() => {
+      this.pendingSpectatorTimer = null;
+      this.autoSelectSpectatorTarget();
+      this.beginDeathOverlayFadeOut();
+    }, Game.DEATH_OVERLAY_DURATION_MS);
+  }
+
+  private beginDeathOverlayFadeOut(): void {
+    if (!this.deathOverlayEl) return;
+    this.deathOverlayEl.classList.add('fade-out');
+    if (this.deathOverlayHideTimer !== null) {
+      window.clearTimeout(this.deathOverlayHideTimer);
+    }
+    this.deathOverlayHideTimer = window.setTimeout(() => {
+      this.deathOverlayHideTimer = null;
+      if (this.deathOverlayEl) {
+        this.deathOverlayEl.classList.remove('visible', 'fade-out');
+      }
+    }, 600);
+  }
+
+  private hideDeathOverlayImmediate(): void {
+    if (this.pendingSpectatorTimer !== null) {
+      window.clearTimeout(this.pendingSpectatorTimer);
+      this.pendingSpectatorTimer = null;
+    }
+    if (this.deathOverlayHideTimer !== null) {
+      window.clearTimeout(this.deathOverlayHideTimer);
+      this.deathOverlayHideTimer = null;
+    }
+    if (this.deathOverlayEl) {
+      this.deathOverlayEl.classList.remove('visible', 'fade-out');
     }
   }
 

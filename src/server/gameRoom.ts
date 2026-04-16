@@ -7,6 +7,7 @@ import {
   RampState, RAMP_COUNT_MIN, RAMP_COUNT_MAX, RAMP_WIDTH, RAMP_HEIGHT,
   RAMP_SPAWN_MARGIN, JUMP_DURATION_MS,
 } from '../shared/types.js';
+import { saveMatchResults } from './db/index.js';
 import { createBike, turnBike, moveBike, killBike } from '../shared/bike.js';
 import { checkAllCollisions } from '../shared/collision.js';
 import {
@@ -425,6 +426,24 @@ export class GameRoom {
       results,
     };
     this.broadcast(msg);
+
+    // Persist match results if there are human players
+    if (this.hasHumanPlayers()) {
+      const matchId = this.id + '-' + Date.now();
+      const dbResults = results.map((r) => {
+        const player = this.players.get(r.playerId);
+        return {
+          matchId,
+          playerName: r.name,
+          placement: r.placement,
+          survivalTime: r.survivalTime,
+          isBot: player?.isBot ?? false,
+        };
+      });
+      saveMatchResults(dbResults).catch((err) => {
+        console.error('Failed to persist match results:', err);
+      });
+    }
 
     // Reset to lobby after a delay
     this.endGameTimeout = setTimeout(() => {

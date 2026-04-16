@@ -56,6 +56,17 @@
             <input type="text" id="room-code-input" class="neon-input" placeholder="Room code..." maxlength="6" />
             <button id="btn-join-room" class="neon-btn">JOIN ROOM</button>
           </div>
+          <button id="btn-toggle-leaderboard" class="neon-btn neon-btn-leaderboard">LEADERBOARD</button>
+        </div>
+
+        <div id="leaderboard-section" class="lobby-section" style="display:none;">
+          <div class="leaderboard-header">
+            <span class="neon-label">TOP RIDERS</span>
+            <button id="btn-close-leaderboard" class="neon-btn-close">&times;</button>
+          </div>
+          <div id="leaderboard-content" class="leaderboard-content">
+            <p class="leaderboard-loading">Loading...</p>
+          </div>
         </div>
 
         <div id="room-section" class="lobby-section" style="display:none;">

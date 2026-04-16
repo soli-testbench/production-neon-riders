@@ -1,6 +1,6 @@
 import { BikeState, ArenaConfig, Point } from './types.js';
 
-function distanceToSegment(p: Point, a: Point, b: Point): number {
+export function distanceToSegment(p: Point, a: Point, b: Point): number {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const lenSq = dx * dx + dy * dy;

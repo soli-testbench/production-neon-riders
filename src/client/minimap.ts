@@ -11,6 +11,9 @@ export class Minimap {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private pulsePhase = 0;
+  private lastBikes: BikeState[] = [];
+  private lastArena: ArenaConfig | null = null;
+  private onBikeClick: ((bikeId: string) => void) | null = null;
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -21,13 +24,43 @@ export class Minimap {
     this.canvas.style.bottom = `${MINIMAP_PADDING}px`;
     this.canvas.style.left = `${MINIMAP_PADDING}px`;
     this.canvas.style.zIndex = '10';
-    this.canvas.style.pointerEvents = 'none';
+    this.canvas.style.pointerEvents = 'auto';
     this.canvas.style.display = 'none';
+    this.canvas.style.cursor = 'pointer';
     document.body.appendChild(this.canvas);
 
     const ctx = this.canvas.getContext('2d');
     if (!ctx) throw new Error('Could not get minimap 2D context');
     this.ctx = ctx;
+
+    this.canvas.addEventListener('click', (e: MouseEvent) => {
+      if (!this.onBikeClick || !this.lastArena) return;
+      const rect = this.canvas.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const clickY = e.clientY - rect.top;
+      const scaleX = MINIMAP_WIDTH / this.lastArena.width;
+      const scaleY = MINIMAP_HEIGHT / this.lastArena.height;
+
+      let closestId: string | null = null;
+      let closestDist = Infinity;
+      for (const bike of this.lastBikes) {
+        if (!bike.alive) continue;
+        const mx = bike.x * scaleX;
+        const my = bike.y * scaleY;
+        const dist = Math.sqrt((clickX - mx) ** 2 + (clickY - my) ** 2);
+        if (dist < 15 && dist < closestDist) {
+          closestDist = dist;
+          closestId = bike.id;
+        }
+      }
+      if (closestId) {
+        this.onBikeClick(closestId);
+      }
+    });
+  }
+
+  setOnBikeClick(cb: (bikeId: string) => void): void {
+    this.onBikeClick = cb;
   }
 
   show(): void {
@@ -39,6 +72,9 @@ export class Minimap {
   }
 
   render(arena: ArenaConfig, bikes: BikeState[], localPlayerId: string | null, powerUps?: PowerUpState[]): void {
+    this.lastBikes = bikes;
+    this.lastArena = arena;
+
     const ctx = this.ctx;
     const w = MINIMAP_WIDTH;
     const h = MINIMAP_HEIGHT;

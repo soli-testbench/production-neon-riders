@@ -128,9 +128,9 @@ export class WebSocketHandler {
 
         const safeColor = sanitizeColor(msg.color);
         const safeName = sanitizeName(msg.name || '');
-        const added = room.addPlayer(playerId, safeName, safeColor, ws);
-        if (!added) {
-          this.sendTo(ws, { type: 'error', message: 'Cannot join room (full or in progress)' });
+        const result = room.addPlayer(playerId, safeName, safeColor, ws);
+        if (!result.success) {
+          this.sendTo(ws, { type: 'error', message: result.reason || 'Cannot join room' });
           return;
         }
 
@@ -179,6 +179,30 @@ export class WebSocketHandler {
           const room = this.rooms.get(roomId);
           room?.removeAi(playerId);
         }
+        break;
+      }
+
+      case 'quick_play': {
+        const roomId = generateRoomCode();
+        const room = new GameRoom(roomId);
+        this.rooms.set(roomId, room);
+        this.roomCreationTimes.set(roomId, Date.now());
+
+        const qpColor = sanitizeColor(msg.color);
+        const qpName = sanitizeName(msg.name || '');
+        room.addPlayer(playerId, qpName, qpColor, ws);
+        this.playerRooms.set(playerId, roomId);
+
+        this.sendTo(ws, {
+          type: 'room_created',
+          roomId,
+          playerId,
+          isHost: true,
+        });
+
+        // Add 3 AI bots and start with shortened countdown
+        room.addAiBots(3);
+        room.startGame(playerId, 1);
         break;
       }
 

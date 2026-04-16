@@ -104,6 +104,19 @@ export class LobbyUI {
   }
 
   private bindEvents(): void {
+    const quickPlayBtn = document.getElementById('btn-quick-play');
+    if (quickPlayBtn) {
+      quickPlayBtn.addEventListener('click', () => {
+        this.saveName();
+        this.saveColor();
+        this.network.send({
+          type: 'quick_play',
+          name: this.getName(),
+          color: this.selectedColor,
+        });
+      });
+    }
+
     this.createRoomBtn.addEventListener('click', () => {
       this.saveName();
       this.saveColor();
@@ -175,6 +188,8 @@ export class LobbyUI {
       } else {
         this.showMenu();
       }
+      // Refresh personal stats when returning from a game
+      this.fetchPlayerStats();
     });
 
     this.playAgainBtn.addEventListener('click', () => {
@@ -187,6 +202,16 @@ export class LobbyUI {
         e.preventDefault();
         this.roomCodeInput.focus();
       }
+    });
+
+    // Fetch personal stats when name input loses focus
+    this.nameInput.addEventListener('blur', () => {
+      this.fetchPlayerStats();
+    });
+
+    // Auto-uppercase room code input value
+    this.roomCodeInput.addEventListener('input', () => {
+      this.roomCodeInput.value = this.roomCodeInput.value.toUpperCase();
     });
 
     // Enter key on room code input triggers join
@@ -503,6 +528,60 @@ export class LobbyUI {
 
   setOnGameStart(cb: () => void): void {
     this.onGameStart = cb;
+  }
+
+  private async fetchPlayerStats(): Promise<void> {
+    const name = this.getName();
+    if (!name || name === 'Rider') return;
+
+    const statsSection = document.getElementById('player-stats-section');
+    const statsContent = document.getElementById('player-stats-content');
+    if (!statsSection || !statsContent) return;
+
+    try {
+      const protocol = window.location.protocol;
+      const host = window.location.host;
+      const res = await fetch(`${protocol}//${host}/api/stats?name=${encodeURIComponent(name)}`);
+      if (!res.ok) throw new Error('Failed to fetch stats');
+
+      const data = await res.json();
+
+      if (!data.found) {
+        statsSection.style.display = '';
+        statsContent.innerHTML = '<p class="stats-empty">No games yet</p>';
+        return;
+      }
+
+      statsSection.style.display = '';
+      const avgMs = data.avg_survival_time || 0;
+      const totalSec = Math.floor(avgMs / 1000);
+      const minutes = Math.floor(totalSec / 60);
+      const seconds = totalSec % 60;
+      const avgTimeStr = `${minutes}:${String(seconds).padStart(2, '0')}`;
+
+      statsContent.innerHTML = `
+        <div class="stats-grid">
+          <div class="stats-item">
+            <span class="stats-value">${data.games_played}</span>
+            <span class="stats-label">Games Played</span>
+          </div>
+          <div class="stats-item">
+            <span class="stats-value">${data.wins}</span>
+            <span class="stats-label">Wins</span>
+          </div>
+          <div class="stats-item">
+            <span class="stats-value">${data.win_rate_percent}%</span>
+            <span class="stats-label">Win Rate</span>
+          </div>
+          <div class="stats-item">
+            <span class="stats-value">${avgTimeStr}</span>
+            <span class="stats-label">Avg Survival</span>
+          </div>
+        </div>
+      `;
+    } catch {
+      statsSection.style.display = 'none';
+    }
   }
 
   private async fetchLeaderboard(): Promise<void> {

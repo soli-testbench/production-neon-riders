@@ -111,6 +111,43 @@ export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
   }
 }
 
+export interface PlayerStats {
+  games_played: number;
+  wins: number;
+  win_rate_percent: number;
+  avg_survival_time: number;
+}
+
+export async function getPlayerStats(name: string): Promise<PlayerStats | null> {
+  if (!pool) return null;
+
+  try {
+    const result = await pool.query(
+      `SELECT total_games, wins, total_survival_time
+       FROM players
+       WHERE name = $1`,
+      [name],
+    );
+
+    if (result.rows.length === 0) return null;
+
+    const row = result.rows[0];
+    const totalGames = Number(row.total_games);
+    const wins = Number(row.wins);
+    const totalSurvivalTime = Number(row.total_survival_time);
+
+    return {
+      games_played: totalGames,
+      wins,
+      win_rate_percent: totalGames > 0 ? Math.round((wins / totalGames) * 100) : 0,
+      avg_survival_time: totalGames > 0 ? Math.round(totalSurvivalTime / totalGames) : 0,
+    };
+  } catch (err) {
+    console.error('Failed to fetch player stats:', err);
+    return null;
+  }
+}
+
 export function isDatabaseConnected(): boolean {
   return pool !== null;
 }

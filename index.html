@@ -50,7 +50,12 @@
           <div id="color-picker" class="color-picker"></div>
         </div>
 
+        <div id="player-stats-section" class="lobby-section" style="display:none;">
+          <div id="player-stats-content" class="player-stats-content"></div>
+        </div>
+
         <div id="menu-buttons" class="lobby-section">
+          <button id="btn-quick-play" class="neon-btn neon-btn-quickplay">QUICK PLAY</button>
           <button id="btn-create-room" class="neon-btn neon-btn-primary">CREATE ROOM</button>
           <div class="join-row">
             <input type="text" id="room-code-input" class="neon-input" placeholder="Room code..." maxlength="6" />
@@ -95,6 +100,9 @@
         <button id="btn-back-lobby" class="neon-btn" style="margin-top:12px;">BACK TO LOBBY</button>
       </div>
     </div>
+
+    <!-- Spectator Label -->
+    <div id="spectator-label"></div>
 
     <!-- Kill Feed -->
     <div id="kill-feed" style="display:none;"></div>

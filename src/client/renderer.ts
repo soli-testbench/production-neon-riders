@@ -8,6 +8,7 @@ export class Renderer {
   private cameraX = 0;
   private cameraY = 0;
   private localPlayerId: string | null = null;
+  private followTargetId: string | null = null;
   private playerDead = false;
   private deathZoom = 1;
   private readonly BASE_ZOOM = 2.5;
@@ -27,6 +28,15 @@ export class Renderer {
 
   setLocalPlayerId(id: string): void {
     this.localPlayerId = id;
+    this.followTargetId = id;
+  }
+
+  setFollowTarget(id: string): void {
+    this.followTargetId = id;
+  }
+
+  getFollowTargetId(): string | null {
+    return this.followTargetId;
   }
 
   setPlayerDead(dead: boolean): void {
@@ -40,12 +50,16 @@ export class Renderer {
   }
 
   private updateCamera(bikes: BikeState[]): void {
-    if (!this.localPlayerId) return;
+    const targetId = this.followTargetId || this.localPlayerId;
+    if (!targetId) return;
 
-    const localBike = bikes.find((b) => b.id === this.localPlayerId);
-    if (!localBike) return;
+    const targetBike = bikes.find((b) => b.id === targetId);
+    if (!targetBike) return;
 
-    if (!this.playerDead) {
+    // When spectating (following a different player) or alive, track the target
+    const isSpectating = this.playerDead && this.followTargetId && this.followTargetId !== this.localPlayerId;
+
+    if (!this.playerDead || isSpectating) {
       const viewW = this.gameCanvas.getWidth();
       const viewH = this.gameCanvas.getHeight();
       const leadOffset = 0.25;
@@ -53,7 +67,7 @@ export class Renderer {
       let offsetX = 0;
       let offsetY = 0;
 
-      switch (localBike.direction) {
+      switch (targetBike.direction) {
         case 'up':
           offsetY = -viewH * leadOffset;
           break;
@@ -68,15 +82,15 @@ export class Renderer {
           break;
       }
 
-      const targetX = localBike.x + offsetX - viewW / 2;
-      const targetY = localBike.y + offsetY - viewH / 2;
+      const targetX = targetBike.x + offsetX - viewW / 2;
+      const targetY = targetBike.y + offsetY - viewH / 2;
 
       const smoothing = 0.15;
       this.cameraX += (targetX - this.cameraX) * smoothing;
       this.cameraY += (targetY - this.cameraY) * smoothing;
     }
 
-    if (this.playerDead && this.deathZoom > this.DEATH_ZOOM_TARGET) {
+    if (this.playerDead && !isSpectating && this.deathZoom > this.DEATH_ZOOM_TARGET) {
       this.deathZoom = Math.max(this.DEATH_ZOOM_TARGET, this.deathZoom - this.DEATH_ZOOM_SPEED);
     }
   }
@@ -86,7 +100,11 @@ export class Renderer {
   }
 
   private getEffectiveZoom(): number {
-    return this.playerDead ? this.deathZoom : this.BASE_ZOOM;
+    if (this.playerDead) {
+      const isSpectating = this.followTargetId && this.followTargetId !== this.localPlayerId;
+      return isSpectating ? this.BASE_ZOOM : this.deathZoom;
+    }
+    return this.BASE_ZOOM;
   }
 
   private getVisibleBounds(): { visLeft: number; visTop: number; visRight: number; visBottom: number } {

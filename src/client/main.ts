@@ -39,6 +39,9 @@ class Game {
   private powerUps: PowerUpState[] = [];
   private ramps: RampState[] = [];
   private localBoostEndTime: number | null = null;
+  private spectatorTargetId: string | null = null;
+  private isLocalPlayerDead = false;
+  private spectatorLabel: HTMLElement | null = null;
 
   constructor() {
     this.canvas = new GameCanvas('game-canvas');
@@ -65,7 +68,12 @@ class Game {
     // Input handling
     this.input.onDirection((direction) => {
       if (this.gameActive) {
-        this.network.send({ type: 'input', direction });
+        if (this.isLocalPlayerDead) {
+          // Spectator mode: cycle through alive players
+          this.cycleSpectatorTarget(direction === 'right' || direction === 'down' ? 1 : -1);
+        } else {
+          this.network.send({ type: 'input', direction });
+        }
       }
     });
 
@@ -77,6 +85,11 @@ class Game {
     // Connection status indicator
     this.network.onStatusChange((status: ConnectionStatus) => {
       this.updateConnectionStatus(status);
+    });
+
+    // Minimap click for spectator target
+    this.minimap.setOnBikeClick((bikeId: string) => {
+      this.handleMinimapClick(bikeId);
     });
 
     // Connect to server
@@ -147,7 +160,13 @@ class Game {
         this.bikes = startMsg.bikes;
         this.ramps = startMsg.ramps || [];
         this.gameActive = true;
+        this.isLocalPlayerDead = false;
+        this.spectatorTargetId = null;
         this.renderer.setPlayerDead(false);
+        if (this.localPlayerId) {
+          this.renderer.setFollowTarget(this.localPlayerId);
+        }
+        this.hideSpectatorLabel();
         this.interpolator.clear();
         this.interpolator.pushServerState(this.bikes, performance.now());
         this.minimap.show();
@@ -161,8 +180,18 @@ class Game {
         // Check if local player died
         if (this.localPlayerId) {
           const localBike = this.bikes.find((b) => b.id === this.localPlayerId);
-          if (localBike && !localBike.alive) {
+          if (localBike && !localBike.alive && !this.isLocalPlayerDead) {
+            this.isLocalPlayerDead = true;
             this.renderer.setPlayerDead(true);
+            // Auto-start spectating the first alive player
+            this.autoSelectSpectatorTarget();
+          }
+        }
+        // If spectating and the spectated player died, auto-switch
+        if (this.spectatorTargetId) {
+          const spectatedBike = this.bikes.find((b) => b.id === this.spectatorTargetId);
+          if (spectatedBike && !spectatedBike.alive) {
+            this.autoSelectSpectatorTarget();
           }
         }
         break;
@@ -179,7 +208,10 @@ class Game {
       case 'game_over': {
         const gameOverMsg = msg as GameOverMessage;
         this.gameActive = false;
+        this.isLocalPlayerDead = false;
+        this.spectatorTargetId = null;
         this.renderer.setPlayerDead(false);
+        this.hideSpectatorLabel();
         this.interpolator.clear();
         this.minimap.hide();
         this.killFeed.hide();
@@ -206,6 +238,81 @@ class Game {
         }
         break;
       }
+    }
+  }
+
+  private getAliveBikes(): BikeState[] {
+    return this.bikes.filter((b) => b.alive && b.id !== this.localPlayerId);
+  }
+
+  private cycleSpectatorTarget(delta: number): void {
+    const alive = this.getAliveBikes();
+    if (alive.length === 0) {
+      this.spectatorTargetId = null;
+      this.hideSpectatorLabel();
+      if (this.localPlayerId) {
+        this.renderer.setFollowTarget(this.localPlayerId);
+      }
+      return;
+    }
+
+    const currentIdx = alive.findIndex((b) => b.id === this.spectatorTargetId);
+    let nextIdx: number;
+    if (currentIdx === -1) {
+      nextIdx = 0;
+    } else {
+      nextIdx = (currentIdx + delta + alive.length) % alive.length;
+    }
+
+    this.spectatorTargetId = alive[nextIdx].id;
+    this.renderer.setFollowTarget(this.spectatorTargetId);
+    this.showSpectatorLabel(alive[nextIdx].name, alive[nextIdx].color);
+  }
+
+  private autoSelectSpectatorTarget(): void {
+    const alive = this.getAliveBikes();
+    if (alive.length === 0) {
+      this.spectatorTargetId = null;
+      this.hideSpectatorLabel();
+      if (this.localPlayerId) {
+        this.renderer.setFollowTarget(this.localPlayerId);
+      }
+      return;
+    }
+
+    this.spectatorTargetId = alive[0].id;
+    this.renderer.setFollowTarget(this.spectatorTargetId);
+    this.showSpectatorLabel(alive[0].name, alive[0].color);
+  }
+
+  private showSpectatorLabel(name: string, color: string): void {
+    if (!this.spectatorLabel) {
+      this.spectatorLabel = document.getElementById('spectator-label');
+    }
+    if (this.spectatorLabel) {
+      this.spectatorLabel.textContent = `Spectating: ${name}`;
+      this.spectatorLabel.style.color = color;
+      this.spectatorLabel.style.borderColor = color;
+      this.spectatorLabel.style.display = 'block';
+    }
+  }
+
+  private hideSpectatorLabel(): void {
+    if (!this.spectatorLabel) {
+      this.spectatorLabel = document.getElementById('spectator-label');
+    }
+    if (this.spectatorLabel) {
+      this.spectatorLabel.style.display = 'none';
+    }
+  }
+
+  handleMinimapClick(bikeId: string): void {
+    if (!this.isLocalPlayerDead || !this.gameActive) return;
+    const bike = this.bikes.find((b) => b.id === bikeId && b.alive);
+    if (bike) {
+      this.spectatorTargetId = bike.id;
+      this.renderer.setFollowTarget(bike.id);
+      this.showSpectatorLabel(bike.name, bike.color);
     }
   }
 

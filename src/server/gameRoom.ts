@@ -9,7 +9,7 @@ import {
 } from '../shared/types.js';
 import { saveMatchResults } from './db/index.js';
 import { createBike, turnBike, moveBike, killBike } from '../shared/bike.js';
-import { checkAllCollisions } from '../shared/collision.js';
+import { checkAllCollisions, distanceToSegment } from '../shared/collision.js';
 import {
   ServerMessage,
   PlayerListMessage,
@@ -64,9 +64,9 @@ export class GameRoom {
     this.id = id;
   }
 
-  addPlayer(id: string, name: string, color: string, ws: WebSocket): boolean {
-    if (this.state !== 'lobby') return false;
-    if (this.players.size >= 8) return false;
+  addPlayer(id: string, name: string, color: string, ws: WebSocket): { success: boolean; reason?: string } {
+    if (this.state !== 'lobby') return { success: false, reason: 'Game already in progress' };
+    if (this.players.size >= 8) return { success: false, reason: 'Room is full' };
 
     const isHost = this.players.size === 0;
     const safeName = name.slice(0, 16).replace(/[<>&"'/]/g, '');
@@ -84,7 +84,7 @@ export class GameRoom {
     this.players.set(id, { id, name: safeName, color: safeColor, ws, isHost, isBot: false });
 
     this.broadcastPlayerList();
-    return true;
+    return { success: true };
   }
 
   addAi(requesterId: string): boolean {
@@ -194,7 +194,7 @@ export class GameRoom {
     }
   }
 
-  startGame(requesterId: string): void {
+  startGame(requesterId: string, countdownSeconds: number = 3): void {
     const player = this.players.get(requesterId);
     if (!player || !player.isHost) return;
     if (this.state !== 'lobby' && this.state !== 'ended') return;
@@ -209,7 +209,7 @@ export class GameRoom {
     }
 
     this.state = 'countdown';
-    let countdown = 3;
+    let countdown = countdownSeconds;
 
     this.broadcast({ type: 'countdown', seconds: countdown } as CountdownMessage);
 
@@ -226,6 +226,42 @@ export class GameRoom {
         setTimeout(() => this.beginGame(), 500);
       }
     }, 1000);
+  }
+
+  /** Add 3 AI bots without requiring host check (for quick play) */
+  addAiBots(count: number): void {
+    for (let i = 0; i < count; i++) {
+      const botCount = Array.from(this.players.values()).filter((p) => p.isBot).length;
+      if (botCount >= MAX_BOTS) break;
+      if (this.players.size >= 8) break;
+
+      const botId = 'bot-' + Math.random().toString(36).substring(2, 10);
+      const usedNames = new Set(Array.from(this.players.values()).map((p) => p.name));
+      let botName = BOT_NAMES[botCount] || 'Bot-' + (botCount + 1);
+      while (usedNames.has(botName)) {
+        botName = 'Bot-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+      }
+
+      const usedColors = new Set(Array.from(this.players.values()).map((p) => p.color));
+      let botColor = NEON_COLORS[Math.floor(Math.random() * NEON_COLORS.length)];
+      for (const c of NEON_COLORS) {
+        if (!usedColors.has(c)) {
+          botColor = c;
+          break;
+        }
+      }
+
+      const dummyWs = { readyState: 0, send: () => {} } as unknown as WebSocket;
+      this.players.set(botId, {
+        id: botId,
+        name: botName,
+        color: botColor,
+        ws: dummyWs,
+        isHost: false,
+        isBot: true,
+      });
+    }
+    this.broadcastPlayerList();
   }
 
   private beginGame(): void {
@@ -522,7 +558,7 @@ export class GameRoom {
       for (const other of allBikes) {
         const trail = other.trail;
         for (let i = 0; i < trail.length - 1; i++) {
-          const dist = this.distToSegment(shortLook, trail[i], trail[i + 1]);
+          const dist = distanceToSegment(shortLook, trail[i], trail[i + 1]);
           if (dist < AI_TRAIL_AVOID_DIST) {
             score -= (AI_TRAIL_AVOID_DIST - dist) * 3;
           }
@@ -531,7 +567,7 @@ export class GameRoom {
         if (other.alive && trail.length > 0) {
           const lastPt = trail[trail.length - 1];
           const liveEnd: Point = { x: other.x, y: other.y };
-          const dist = this.distToSegment(shortLook, lastPt, liveEnd);
+          const dist = distanceToSegment(shortLook, lastPt, liveEnd);
           if (dist < AI_TRAIL_AVOID_DIST) {
             score -= (AI_TRAIL_AVOID_DIST - dist) * 3;
           }
@@ -590,19 +626,7 @@ export class GameRoom {
     }
   }
 
-  private distToSegment(p: Point, a: Point, b: Point): number {
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const lenSq = dx * dx + dy * dy;
-    if (lenSq === 0) {
-      return Math.sqrt((p.x - a.x) ** 2 + (p.y - a.y) ** 2);
-    }
-    let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq;
-    t = Math.max(0, Math.min(1, t));
-    const projX = a.x + t * dx;
-    const projY = a.y + t * dy;
-    return Math.sqrt((p.x - projX) ** 2 + (p.y - projY) ** 2);
-  }
+
 
   private broadcastPlayerList(): void {
     const msg: PlayerListMessage = {

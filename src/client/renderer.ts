@@ -356,12 +356,32 @@ export class Renderer {
         ctx.fill();
 
         ctx.restore();
+
+        // Draw player name label above the arrow head
+        const isLocal = bike.id === this.localPlayerId;
+        const labelOffsetY = -18;
+        const effectiveZoom = this.getEffectiveZoom();
+        const fontSize = Math.max(8, Math.min(14, 11 / effectiveZoom * 2.5));
+
+        ctx.save();
+        ctx.font = `bold ${fontSize}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillStyle = color;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = isLocal ? 4 : 8;
+        ctx.globalAlpha = isLocal ? 0.5 : 0.9;
+        ctx.fillText(bike.name, cx, cy + labelOffsetY);
+        ctx.restore();
       }
     }
   }
 
   drawBikes(bikes: BikeState[]): void {
     const ctx = this.ctx;
+
+    // Increment dissolve phase once per frame, not per bike
+    this.trailDissolvePhase += 0.03;
 
     ctx.save();
     this.applyCamera(ctx);
@@ -566,7 +586,6 @@ export class Renderer {
   }
 
   private drawTrailDissolveEffect(ctx: CanvasRenderingContext2D, x: number, y: number, color: string): void {
-    this.trailDissolvePhase += 0.03;
     const sparkleCount = 5;
     for (let i = 0; i < sparkleCount; i++) {
       const angle = (Math.PI * 2 * i) / sparkleCount + this.trailDissolvePhase;
@@ -614,9 +633,9 @@ export class Renderer {
     for (const ramp of ramps) {
       // Culling
       if (
-        ramp.x < visLeft - ramp.width &&
-        ramp.x > visRight + ramp.width &&
-        ramp.y < visTop - ramp.height &&
+        ramp.x < visLeft - ramp.width ||
+        ramp.x > visRight + ramp.width ||
+        ramp.y < visTop - ramp.height ||
         ramp.y > visBottom + ramp.height
       ) continue;
 

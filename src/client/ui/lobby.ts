@@ -37,7 +37,9 @@ export class LobbyUI {
 
   constructor(network: NetworkClient) {
     this.network = network;
-    this.selectedColor = NEON_COLORS[0];
+    // Load saved color or default to first
+    const savedColor = localStorage.getItem('neon-riders-color');
+    this.selectedColor = savedColor && NEON_COLORS.includes(savedColor) ? savedColor : NEON_COLORS[0];
 
     // Get DOM elements
     this.lobbyOverlay = document.getElementById('lobby-overlay')!;
@@ -67,9 +69,9 @@ export class LobbyUI {
 
   private initColorPicker(): void {
     while (this.colorPicker.firstChild) this.colorPicker.removeChild(this.colorPicker.firstChild);
-    NEON_COLORS.forEach((color, idx) => {
+    NEON_COLORS.forEach((color) => {
       const swatch = document.createElement('div');
-      swatch.className = 'color-swatch' + (idx === 0 ? ' selected' : '');
+      swatch.className = 'color-swatch' + (color === this.selectedColor ? ' selected' : '');
       swatch.style.backgroundColor = color;
       swatch.style.setProperty('--swatch-color', color);
       swatch.style.boxShadow = `0 0 8px ${color}44`;
@@ -93,6 +95,10 @@ export class LobbyUI {
     localStorage.setItem('neon-riders-name', this.nameInput.value);
   }
 
+  private saveColor(): void {
+    localStorage.setItem('neon-riders-color', this.selectedColor);
+  }
+
   private getName(): string {
     return this.nameInput.value.trim() || 'Rider';
   }
@@ -100,6 +106,7 @@ export class LobbyUI {
   private bindEvents(): void {
     this.createRoomBtn.addEventListener('click', () => {
       this.saveName();
+      this.saveColor();
       this.network.send({
         type: 'create_room',
         name: this.getName(),
@@ -111,6 +118,7 @@ export class LobbyUI {
       const roomId = this.roomCodeInput.value.trim().toUpperCase();
       if (!roomId) return;
       this.saveName();
+      this.saveColor();
       this.network.send({
         type: 'join',
         name: this.getName(),
@@ -138,6 +146,23 @@ export class LobbyUI {
     if (removeAiBtn) {
       removeAiBtn.addEventListener('click', () => {
         this.network.send({ type: 'remove_ai' });
+      });
+    }
+
+    const toggleLeaderboardBtn = document.getElementById('btn-toggle-leaderboard');
+    const closeLeaderboardBtn = document.getElementById('btn-close-leaderboard');
+    const leaderboardSection = document.getElementById('leaderboard-section');
+
+    if (toggleLeaderboardBtn && leaderboardSection) {
+      toggleLeaderboardBtn.addEventListener('click', () => {
+        const visible = leaderboardSection.style.display !== 'none';
+        leaderboardSection.style.display = visible ? 'none' : '';
+        if (!visible) this.fetchLeaderboard();
+      });
+    }
+    if (closeLeaderboardBtn && leaderboardSection) {
+      closeLeaderboardBtn.addEventListener('click', () => {
+        leaderboardSection.style.display = 'none';
       });
     }
 
@@ -171,6 +196,7 @@ export class LobbyUI {
         const roomId = this.roomCodeInput.value.trim().toUpperCase();
         if (!roomId) return;
         this.saveName();
+        this.saveColor();
         this.network.send({
           type: 'join',
           name: this.getName(),
@@ -477,6 +503,78 @@ export class LobbyUI {
 
   setOnGameStart(cb: () => void): void {
     this.onGameStart = cb;
+  }
+
+  private async fetchLeaderboard(): Promise<void> {
+    const content = document.getElementById('leaderboard-content');
+    if (!content) return;
+
+    content.innerHTML = '<p class="leaderboard-loading">Loading...</p>';
+
+    try {
+      const protocol = window.location.protocol;
+      const host = window.location.host;
+      const res = await fetch(`${protocol}//${host}/api/leaderboard`);
+      if (!res.ok) throw new Error('Failed to fetch');
+
+      const entries: { name: string; wins: number; totalGames: number; totalSurvivalTime: number }[] = await res.json();
+
+      if (entries.length === 0) {
+        content.innerHTML = '<p class="leaderboard-empty">No games played yet</p>';
+        return;
+      }
+
+      const table = document.createElement('table');
+      table.className = 'leaderboard-table';
+
+      const thead = document.createElement('thead');
+      const headerRow = document.createElement('tr');
+      for (const label of ['#', 'Player', 'Wins', 'Games', 'Avg Time']) {
+        const th = document.createElement('th');
+        th.textContent = label;
+        headerRow.appendChild(th);
+      }
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      entries.forEach((entry, idx) => {
+        const row = document.createElement('tr');
+        if (idx === 0) row.className = 'leaderboard-row-top';
+
+        const tdRank = document.createElement('td');
+        tdRank.textContent = String(idx + 1);
+        row.appendChild(tdRank);
+
+        const tdName = document.createElement('td');
+        tdName.textContent = entry.name;
+        row.appendChild(tdName);
+
+        const tdWins = document.createElement('td');
+        tdWins.textContent = String(entry.wins);
+        row.appendChild(tdWins);
+
+        const tdGames = document.createElement('td');
+        tdGames.textContent = String(entry.totalGames);
+        row.appendChild(tdGames);
+
+        const tdTime = document.createElement('td');
+        const avgMs = entry.totalGames > 0 ? entry.totalSurvivalTime / entry.totalGames : 0;
+        const totalSec = Math.floor(avgMs / 1000);
+        const minutes = Math.floor(totalSec / 60);
+        const seconds = totalSec % 60;
+        tdTime.textContent = `${minutes}:${String(seconds).padStart(2, '0')}`;
+        row.appendChild(tdTime);
+
+        tbody.appendChild(row);
+      });
+      table.appendChild(tbody);
+
+      content.innerHTML = '';
+      content.appendChild(table);
+    } catch {
+      content.innerHTML = '<p class="leaderboard-empty">Could not load leaderboard</p>';
+    }
   }
 
 }
